@@ -1,0 +1,16 @@
+name: 'Lighthouse Action'
+description: 'Audit web performance for deployed staging sites with Lighthouse and Github Actions.'
+inputs:
+  url:
+    description: 'Page URL'
+  wptConnectionSpeed:
+    description: 'WPT connection speed profile: twog, threegslow, threeg, threegfast, fourg, lte'
+outputs:
+  resultsPath:
+    description: 'Path to the folder with Lighthouse audit results'
+runs:
+  using: 'node12'
+  main: 'src/index.js'
+branding:
+  icon: 'activity'
+  color: 'gray-dark'

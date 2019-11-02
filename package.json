@@ -1,0 +1,23 @@
+{
+  "name": "lighthouse-action",
+  "version": "1.0.0",
+  "description": "Audit web performance for deployed staging sites with Lighthouse and Github Actions.",
+  "main": "src/index.js",
+  "repository": "git@github.com:justinribeiro/lighthouse-action.git",
+  "author": "Justin Ribeiro <justin@justinribeiro.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "eslint": "^6.4.0",
+    "eslint-config-google": "^0.14.0",
+    "eslint-config-prettier": "^6.3.0",
+    "prettier": "^1.18.2"
+  },
+  "dependencies": {
+    "@actions/core": "^1.1.1",
+    "@actions/github": "^1.1.0",
+    "fs-extra": "^8.1.0",
+    "lighthouse": "^5.4.0",
+    "node-fetch": "^2.6.0",
+    "puppeteer-core": "^2.0.0"
+  }
+}
