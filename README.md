@@ -67,7 +67,7 @@ jobs:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com/
           lighthouseBudget: .github/test/budget.json
-          lighthouseConfiguration: .github/test/custom-config.json
+          lighthouseConfiguration: .github/test/custom-config.js
       - name: Saving Lighthouse Audit Artifacts
         uses: actions/upload-artifact@master
         with:
@@ -78,6 +78,8 @@ jobs:
 For full details on how to define a lighthouse configuration file, see [Lighthouse Configuration](https://github.com/GoogleChrome/lighthouse/blob/master/docs/configuration.md) for more information.
 
 For full details on how to define a lighthouse budget.json file, see [Performance Budgets (Keep Request Counts Low And File Sizes Small)](https://developers.google.com/web/tools/lighthouse/audits/budgets) for more information.
+
+For a live example of this action in practice, see [my blog-pwa repo workflow](https://github.com/justinribeiro/blog-pwa/blob/master/.github/workflows/main.yml).
 
 ## Inputs
 
