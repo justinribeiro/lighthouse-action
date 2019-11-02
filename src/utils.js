@@ -34,7 +34,7 @@ async function writeResultsToFileSystem(report, lhr, core) {
   core.setOutput('resultsPath', resultsPath);
 }
 
-async function postResultsToPullRequest(lhr, github, secret) {
+async function postResultsToPullRequest(lhr, speed, github, secret) {
   let rows = '';
   let timings = '';
   Object.values(lhr.categories).forEach(cat => {
@@ -54,6 +54,9 @@ async function postResultsToPullRequest(lhr, github, secret) {
 
   const data = `
 [Lighthouse](https://developers.google.com/web/tools/lighthouse/) report for the changes in this PR:
+
+WPT Profile: ${speed}
+
 | Category | Score |
 | ------------- | ------------- |
 ${rows}

@@ -14,6 +14,7 @@ const {
 async function main() {
   const url = core.getInput('url');
   const secret = core.getInput('secret');
+  const wptProfile = core.getInput('wptConnectionSpeed');
 
   const opts = {
     lighthouseConfig: {
@@ -24,7 +25,7 @@ async function main() {
     disableStorageReset: true,
     emulatedFormFactor: 'mobile',
     throttlingMethod: 'provided',
-    connection: core.getInput('wptConnectionSpeed'),
+    connection: wptProfile,
   };
 
   const {report, lhr} = await launchChromeAndRunLighthouse(
@@ -32,9 +33,10 @@ async function main() {
     opts,
     opts.lighthouseConfig,
   );
-  writeResultsToConsole(lhr, core.getInput('wptConnectionSpeed'));
+  console.log(report);
+  writeResultsToConsole(lhr, wptProfile);
   await writeResultsToFileSystem(report, lhr, core);
-  await postResultsToPullRequest(lhr, github, secret);
+  await postResultsToPullRequest(lhr, wptProfile, github, secret);
 }
 
 main()
