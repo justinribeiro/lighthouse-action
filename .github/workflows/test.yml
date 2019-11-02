@@ -6,7 +6,6 @@ jobs:
   perf:
     name: Test action configuration
     runs-on: ubuntu-latest
-    needs: build
     steps:
       - uses: actions/checkout@v1
       - name: Generic Default Setup
