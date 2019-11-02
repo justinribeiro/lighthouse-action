@@ -80,8 +80,6 @@ _Tested with Lighthouse v${lhr.lighthouseVersion} via [lighthouse-action](https:
       },
     },
   );
-
-  console.log(await comment.json());
 }
 
 module.exports = {
