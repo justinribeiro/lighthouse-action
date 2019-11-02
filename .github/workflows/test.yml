@@ -14,6 +14,11 @@ jobs:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com/
           wptConnectionSpeed: edge
+      - name: Saving Lighthouse Audit Artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: lighthouse-artifacts
+          path: './results'
       - name: With custom-config.json
         uses: ./
         with:
