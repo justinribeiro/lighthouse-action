@@ -5,29 +5,30 @@ const github = require('@actions/github');
 
 // My Puppeteer + WPT variant setup
 const {launchChromeAndRunLighthouse} = require('./chrome');
+const {getLighthouseConfiguration} = require('./config');
 const {
   postResultsToPullRequest,
   writeResultsToFileSystem,
   writeResultsToConsole,
 } = require('./utils');
+const {checkIfActionShouldFail} = require('./checks');
 
 async function main() {
   const url = core.getInput('url');
   const secret = core.getInput('secret');
   const wptProfile = core.getInput('wptConnectionSpeed') || 'threegfast';
 
-  const opts = {
-    lighthouseConfig: {
-      extends: 'lighthouse:default',
-      settings: {},
-    },
-    disableNetworkThrottling: true,
-    disableStorageReset: true,
-    emulatedFormFactor: 'mobile',
-    throttlingMethod: 'provided',
-    connection: wptProfile,
-    output: 'html',
-  };
+  if (!url) {
+    throw new Error(
+      'URL is not defined; cannot run Lighthouse audit. Please check your Github Action definition.',
+    );
+  }
+
+  if (!secret) {
+    core.warning('secret not defined; PR comment reporting disabled.');
+  }
+
+  const opts = getLighthouseConfiguration();
 
   const {report, lhr} = await launchChromeAndRunLighthouse(
     url,
@@ -38,6 +39,7 @@ async function main() {
   writeResultsToConsole(lhr, wptProfile);
   await writeResultsToFileSystem(report, lhr, core);
   await postResultsToPullRequest(lhr, wptProfile, github, secret);
+  checkIfActionShouldFail(lhr, core);
 }
 
 main()
