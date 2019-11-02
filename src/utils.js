@@ -62,7 +62,7 @@ Based on your budget.json settings, the following audits have failed:
     budgetFailures.forEach(item => {
       let countOverBudget;
       if (!item.countOverBudget) {
-        countOverBudget = 'n/a';
+        countOverBudget = 'N/A';
       } else {
         countOverBudget = item.countOverBudget;
       }

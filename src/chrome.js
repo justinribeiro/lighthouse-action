@@ -79,10 +79,14 @@ async function launchChromeAndRunLighthouse(url, opts, config) {
         .target()
         .createCDPSession()
         .then(client => {
-          return client.send(
-            'Network.emulateNetworkConditions',
-            NETWORK[opts.connection],
-          );
+          if (NETWORK[opts.connection]) {
+            return client.send(
+              'Network.emulateNetworkConditions',
+              NETWORK[opts.connection],
+            );
+          } else {
+            return client.send();
+          }
         })
         .catch(err => console.error(err));
 

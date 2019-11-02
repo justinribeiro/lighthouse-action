@@ -5,11 +5,13 @@
 ## Features
 
 - Uses [Puppeteer](https://github.com/GoogleChrome/puppeteer) to start up Chrome with [network emulation settings defined by WebPageTest](https://github.com/WPO-Foundation/webpagetest/blob/master/www/settings/connectivity.ini.sample).
-- Allows saving of artifacts to the Github Action run.
+- Supports saving of artifacts to the Github Action run.
+- Supports custom Lighthouse configuration via JavaScript file.
+- Supports custom Lighthouse budget.json files for failing PRs.
 - Posts results of audit run as a comment on your PR.
   ![image](https://user-images.githubusercontent.com/643503/68066171-d35dc800-fcf0-11e9-9c95-72b689fa7eef.png)
 
-## Usage
+## Basic Usage
 
 This is best run against `on: [pull_request]`, so you'll get the report comment, but you technically do not have to use it this way.
 
@@ -50,6 +52,14 @@ jobs:
 
 Defaults to `threegfast`. Can be any of the following: `twog`, `threegslow`, `threeg`, `threegfast`, `fourg`, `lte`.
 
+### `lighthouseConfiguration`
+
+_Optional_ File path to custom lighthouse configuration JavaScript file. See [Lighthouse Configuration](https://github.com/GoogleChrome/lighthouse/blob/master/docs/configuration.md) for more information.
+
+### `lighthouseBudget`
+
+_Optional_ File path to custom budget.json file; will fail PRs based on budget result. See [Performance Budgets (Keep Request Counts Low And File Sizes Small)](https://developers.google.com/web/tools/lighthouse/audits/budgets) for more information.
+
 ## Outputs
 
 ### `resultsPath`
@@ -60,7 +70,7 @@ Path to the folder with Lighthouse audit results.
 
 1. I wanted a simpler, cleaner example anyone could jump into, fork, and make their own.
 2. None of the other offerings post on a PR the audit result.
-3. I wanted to explore harsher network conditioning.
+3. I wanted to explore harsher network conditioning, which I already do in things like my [lighthouse-jest-example](https://github.com/justinribeiro/lighthouse-jest-example) fairly successfully.
 
 ## The future
 

@@ -28,7 +28,6 @@ function getLighthouseConfiguration(core) {
       fs.existsSync(join(process.cwd(), lhConfigurationFile))
     ) {
       configuration = require(join(process.cwd(), lhConfigurationFile));
-      console.log('test:', configuration);
     }
 
     // If they pass both a custom config and a WPT profile, then we assume they
@@ -44,8 +43,6 @@ function getLighthouseConfiguration(core) {
   if (budget) {
     configuration.budgets = budget;
   }
-
-  console.log(configuration);
 
   return configuration;
 }
