@@ -5,9 +5,8 @@ module.exports = {
     sourceType: 'module',
   },
   env: {
-    browser: true,
+    node: true,
   },
-  plugins: ['html', 'lit'],
   rules: {
     'max-len': [
       'error',
@@ -35,14 +34,5 @@ module.exports = {
       },
     ],
     'space-in-parens': 'error',
-  },
-  globals: {
-    customElements: false,
-    ga: false,
-    __import: false,
-    importModule: false,
-    module: false,
-    Prism: false,
-    Promise: false,
   },
 };

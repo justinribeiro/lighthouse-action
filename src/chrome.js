@@ -60,6 +60,7 @@ const NETWORK = {
  * @return {promise}
  */
 async function launchChromeAndRunLighthouse(url, opts, config) {
+  // eslint-disable-next-line no-unused-vars
   const chrome = await chromeLauncher.launch({
     port: 9222,
     logLevel: 'silent',
