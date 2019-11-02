@@ -1,13 +1,15 @@
 'use strict';
 
-import {postResultsToPullRequest} from './utils';
-
 const core = require('@actions/core');
 const github = require('@actions/github');
 
 // My Puppeteer + WPT variant setup
 const {launchChromeAndRunLighthouse} = require('./chrome');
-const {writeResultsToFileSystem, writeResultsToConsole} = require('./utils');
+const {
+  postResultsToPullRequest,
+  writeResultsToFileSystem,
+  writeResultsToConsole,
+} = require('./utils');
 
 async function main() {
   const url = core.getInput('url');
