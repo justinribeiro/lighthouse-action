@@ -74,32 +74,22 @@ async function launchChromeAndRunLighthouse(url, opts, config) {
   browser.on('targetchanged', async target => {
     const page = await target.page();
 
-    if (page && page.target().url() === url) {
+    if (NETWORK[opts.connection]) {
       await page
         .target()
         .createCDPSession()
         .then(client => {
-          if (NETWORK[opts.connection]) {
-            return client.send(
-              'Network.emulateNetworkConditions',
-              NETWORK[opts.connection],
-            );
-          } else {
-            console.log(
-              `CDP: network conditions set to custom Lighthouse configuration.`,
-            );
-            return client.send();
-          }
+          console.log(
+            `CDP: network conditions set to WPT ${opts.connection} profile.`,
+          );
+          return client.send(
+            'Network.emulateNetworkConditions',
+            NETWORK[opts.connection],
+          );
         })
         .catch(err => console.error(err));
-
-      console.log(
-        `CDP: network conditions set to WPT ${opts.connection} profile.`,
-      );
     } else {
-      console.log(
-        'URL mismatch in targetChanged! Possibly testing offline support?',
-      );
+      console.log(`CDP: network conditions set to custom Lighthouse profile.`);
     }
   });
 
