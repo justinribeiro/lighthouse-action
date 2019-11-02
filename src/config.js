@@ -12,9 +12,11 @@ function defaultLighthouseConfiguration(wptProfile) {
     disableNetworkThrottling: true,
     disableStorageReset: true,
     emulatedFormFactor: 'mobile',
-    throttlingMethod: 'provided',
+    throttlingMethod: 'devtools',
     throttling: {
-      cpuSlowdownMultiplier: 4,
+      requestLatencyMs: 0,
+      downloadThroughputKbps: 0,
+      uploadThroughputKbps: 0,
     },
     logLevel: 'info',
     connection: wptProfile || 'threegfast',
