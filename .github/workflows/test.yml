@@ -10,26 +10,26 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Generic Default Setup
-        uses: justinribeiro/lighthouse-action@master
+        uses: ./
         with:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com
           wptConnectionSpeed: threegfast
       - name: With Budget.json
-        uses: justinribeiro/lighthouse-action@master
+        uses: ./
         with:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com
           wptConnectionSpeed: threegfast
           lighthouseBudget: .github/test/budget.json
       - name: With custom-config.json
-        uses: justinribeiro/lighthouse-action@master
+        uses: ./
         with:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com
           lighthouseConfiguration: .github/test/custom-config.json
       - name: With everything
-        uses: justinribeiro/lighthouse-action@master
+        uses: ./
         with:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com
@@ -37,7 +37,7 @@ jobs:
           lighthouseBudget: .github/test/budget.json
           lighthouseConfiguration: .github/test/custom-config.json
       - name: No URL set
-        uses: justinribeiro/lighthouse-action@master
+        uses: ./
         with:
           secret: ${{ secrets.GITHUB_TOKEN }}
           wptConnectionSpeed: threegfast
