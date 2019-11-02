@@ -33,7 +33,7 @@ async function main() {
     opts,
     opts.lighthouseConfig,
   );
-  console.log(report);
+
   writeResultsToConsole(lhr, wptProfile);
   await writeResultsToFileSystem(report, lhr, core);
   await postResultsToPullRequest(lhr, wptProfile, github, secret);
