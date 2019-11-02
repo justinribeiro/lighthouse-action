@@ -29,8 +29,8 @@ async function writeResultsToFileSystem(report, lhr, core) {
   const resultsPath = join(process.cwd(), 'results');
   await ensureDir(resultsPath);
   const reportPath = join(resultsPath, getFilenamePrefix(lhr));
-  await writeFile(reportPath + '.html', report);
-  await writeFile(reportPath + '.json', JSON.stringify(lhr, null, '  '));
+  await writeFile(`${reportPath}.html`, report);
+  await writeFile(`${reportPath}.json`, JSON.stringify(lhr, null, '  '));
   core.setOutput('resultsPath', resultsPath);
 }
 
