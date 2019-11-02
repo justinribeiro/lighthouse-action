@@ -63,7 +63,7 @@ async function launchChromeAndRunLighthouse(url, opts, config) {
   // eslint-disable-next-line no-unused-vars
   const chrome = await chromeLauncher.launch({
     port: 9222,
-    logLevel: 'silent',
+    logLevel: 'info',
     chromeFlags: ['--headless', '--disable-gpu'],
   });
 
@@ -73,6 +73,17 @@ async function launchChromeAndRunLighthouse(url, opts, config) {
 
   browser.on('targetchanged', async target => {
     const page = await target.page();
+
+    console.log(
+      `OUTSIDE: CDP: network conditions set to WPT ${opts.connection} profile`,
+    );
+
+    console.log(
+      page && page.target().url() === url,
+      page,
+      url,
+      page.target().url(),
+    );
 
     if (page && page.target().url() === url) {
       await page
