@@ -14,7 +14,7 @@ const {
 async function main() {
   const url = core.getInput('url');
   const secret = core.getInput('secret');
-  const wptProfile = core.getInput('wptConnectionSpeed');
+  const wptProfile = core.getInput('wptConnectionSpeed') || 'threegfast';
 
   const opts = {
     lighthouseConfig: {
