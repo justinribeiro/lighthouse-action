@@ -23,6 +23,7 @@ function getLighthouseConfiguration(core) {
   let configuration;
   const lhConfigurationFile = core.getInput('lighthouseConfiguration');
   try {
+    console.log( join( process.cwd(), lhConfigurationFile ), fs.existsSync( join( process.cwd(), lhConfigurationFile ) );
     if (
       lhConfigurationFile &&
       fs.existsSync(join(process.cwd(), lhConfigurationFile))
