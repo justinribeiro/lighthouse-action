@@ -6,48 +6,51 @@ const lighthouse = require('lighthouse');
 
 // via WebPageTest settings
 // WPO-Foundation/webpagetest/blob/master/www/settings/connectivity.ini.sample
+//
+// These are divided by 8 because we need bytes/s for Chrome
+//
 const NETWORK = {
   edge: {
     offline: false,
     latency: 840,
-    downloadThroughput: 240000,
-    uploadThroughput: 240000,
+    downloadThroughput: Math.floor(240000 / 8),
+    uploadThroughput: Math.floor(240000 / 8),
   },
   twog: {
     offline: false,
     latency: 800,
-    downloadThroughput: 280000,
-    uploadThroughput: 256000,
+    downloadThroughput: Math.floor(280000 / 8),
+    uploadThroughput: Math.floor(256000 / 8),
   },
   threegslow: {
     offline: false,
     latency: 400,
-    downloadThroughput: 400000,
-    uploadThroughput: 400000,
+    downloadThroughput: Math.floor(400000 / 8),
+    uploadThroughput: Math.floor(400000 / 8),
   },
   threeg: {
     offline: false,
     latency: 300,
-    downloadThroughput: 1600000,
-    uploadThroughput: 768000,
+    downloadThroughput: Math.floor(1600000 / 8),
+    uploadThroughput: Math.floor(768000 / 8),
   },
   threegfast: {
     offline: false,
     latency: 170,
-    downloadThroughput: 1600000,
-    uploadThroughput: 768000,
+    downloadThroughput: Math.floor(1600000 / 8),
+    uploadThroughput: Math.floor(768000 / 8),
   },
   fourg: {
     offline: false,
-    latency: 150,
-    downloadThroughput: 9000000,
-    uploadThroughput: 9000000,
+    latency: 170,
+    downloadThroughput: Math.floor(9000000 / 8),
+    uploadThroughput: Math.floor(9000000 / 8),
   },
   lte: {
     offline: false,
     latency: 70,
-    downloadThroughput: 12000000,
-    uploadThroughput: 12000000,
+    downloadThroughput: Math.floor(12000000 / 8),
+    uploadThroughput: Math.floor(12000000 / 8),
   },
 };
 
@@ -74,21 +77,22 @@ async function launchChromeAndRunLighthouse(url, opts, config) {
   browser.on('targetchanged', async target => {
     const page = await target.page();
 
-    if (page && page.target().url() === url) {
+    if (NETWORK[opts.connection]) {
       await page
         .target()
         .createCDPSession()
         .then(client => {
+          console.log(
+            `CDP: network conditions set to WPT ${opts.connection} profile.`,
+          );
           return client.send(
             'Network.emulateNetworkConditions',
             NETWORK[opts.connection],
           );
         })
         .catch(err => console.error(err));
-
-      console.log(
-        `CDP: network conditions set to WPT ${opts.connection} profile`,
-      );
+    } else {
+      console.log(`CDP: network conditions set to custom Lighthouse profile.`);
     }
   });
 

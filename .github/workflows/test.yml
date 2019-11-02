@@ -1,0 +1,42 @@
+name: PR Tester
+
+on: [pull_request]
+
+jobs:
+  perf:
+    name: Test action configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Generic Default Setup
+        uses: ./
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          url: https://justinribeiro.com/
+          wptConnectionSpeed: threeg
+      - name: Saving Lighthouse Audit Artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: lighthouse-artifacts
+          path: './results'
+      - name: With custom-config.json
+        uses: ./
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          url: https://justinribeiro.com/
+          lighthouseConfiguration: .github/test/custom-config.js
+      - name: With Budget.json
+        uses: ./
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          url: https://justinribeiro.com/
+          wptConnectionSpeed: threegfast
+          lighthouseBudget: .github/test/budget.json
+      - name: With everything
+        uses: ./
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          url: https://justinribeiro.com/
+          wptConnectionSpeed: threegfast
+          lighthouseBudget: .github/test/budget.json
+          lighthouseConfiguration: .github/test/custom-config.json

@@ -1,10 +1,14 @@
-name: 'Lighthouse Action'
-description: 'Audit web performance for deployed staging sites with Lighthouse and Github Actions.'
+name: 'Web Performance Audits with Lighthouse'
+description: 'Audit web performance with Lighthouse and Github Actions.'
 inputs:
   url:
     description: 'Page URL'
   wptConnectionSpeed:
     description: 'WPT connection speed profile: twog, threegslow, threeg, threegfast, fourg, lte'
+  lighthouseConfiguration:
+    description: 'File path to custom lighthouse configuration JavaScript file. See https://github.com/GoogleChrome/lighthouse/blob/master/docs/configuration.md'
+  lighthouseBudget:
+    description: 'File path to custom budget.json file; will fail PRs based on budget result. See https://developers.google.com/web/tools/lighthouse/audits/budgets'
   secret:
     description: 'This should be the default secrets.GITHUB_TOKEN so that we can send comments to your PRs.'
 outputs:
