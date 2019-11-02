@@ -32,9 +32,9 @@ async function main() {
     opts,
     opts.lighthouseConfig,
   );
-  writeResultsToConsole(lhr);
-  writeResultsToFileSystem(report, lhr, core);
-  postResultsToPullRequest(lhr, github, secret);
+  writeResultsToConsole(lhr, core.getInput('wptConnectionSpeed'));
+  await writeResultsToFileSystem(report, lhr, core);
+  await postResultsToPullRequest(lhr, github, secret);
 }
 
 main()

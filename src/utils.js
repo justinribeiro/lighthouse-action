@@ -6,8 +6,8 @@ const {
   getFilenamePrefix,
 } = require('lighthouse/lighthouse-core/lib/file-namer');
 
-function writeResultsToConsole(lhr) {
-  console.log(`Lighthouse Scoring`);
+function writeResultsToConsole(lhr, speed) {
+  console.log(`Lighthouse Scoring, ${speed}`);
   console.log(`-------------------------`);
   console.log(`Performance: ${lhr.categories.performance.score * 100}`);
   console.log(`Accessibility: ${lhr.categories.accessibility.score * 100}`);
@@ -77,6 +77,8 @@ _Tested with Lighthouse version: ${lhr.lighthouseVersion}_`;
       },
     },
   );
+
+  console.log(await comment.json());
 }
 
 module.exports = {
