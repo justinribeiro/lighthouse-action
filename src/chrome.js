@@ -80,7 +80,7 @@ async function launchChromeAndRunLighthouse(url, opts, config) {
 
     console.log(
       page && page.target().url() === url,
-      page,
+      page.target().url() === url,
       url,
       page.target().url(),
     );
