@@ -18,7 +18,6 @@ function defaultLighthouseConfiguration(wptProfile) {
       downloadThroughputKbps: 0,
       uploadThroughputKbps: 0,
     },
-    logLevel: 'info',
     connection: wptProfile || 'threegfast',
     output: 'html',
   };
