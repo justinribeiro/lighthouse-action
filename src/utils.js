@@ -67,19 +67,16 @@ ${timings}
 
 _Tested with Lighthouse v${lhr.lighthouseVersion} via [lighthouse-action](https://github.com/justinribeiro/lighthouse-action)_`;
 
-  const comment = await fetch(
-    github.context.payload.pull_request.comments_url,
-    {
-      method: 'post',
-      body: JSON.stringify({
-        body: data,
-      }),
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${secret}`,
-      },
+  await fetch(github.context.payload.pull_request.comments_url, {
+    method: 'post',
+    body: JSON.stringify({
+      body: data,
+    }),
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${secret}`,
     },
-  );
+  });
 }
 
 module.exports = {
