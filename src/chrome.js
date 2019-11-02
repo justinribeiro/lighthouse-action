@@ -6,48 +6,51 @@ const lighthouse = require('lighthouse');
 
 // via WebPageTest settings
 // WPO-Foundation/webpagetest/blob/master/www/settings/connectivity.ini.sample
+//
+// These are divided by 8 because we need bits/s for Chrome
+//
 const NETWORK = {
   edge: {
     offline: false,
     latency: 840,
-    downloadThroughput: 240000,
-    uploadThroughput: 240000,
+    downloadThroughput: 240000 / 8,
+    uploadThroughput: 240000 / 8,
   },
   twog: {
     offline: false,
     latency: 800,
-    downloadThroughput: 280000,
-    uploadThroughput: 256000,
+    downloadThroughput: 280000 / 8,
+    uploadThroughput: 256000 / 8,
   },
   threegslow: {
     offline: false,
     latency: 400,
-    downloadThroughput: 400000,
-    uploadThroughput: 400000,
+    downloadThroughput: 400000 / 8,
+    uploadThroughput: 400000 / 8,
   },
   threeg: {
     offline: false,
     latency: 300,
-    downloadThroughput: 1600000,
-    uploadThroughput: 768000,
+    downloadThroughput: 1600000 / 8,
+    uploadThroughput: 768000 / 8,
   },
   threegfast: {
     offline: false,
     latency: 170,
-    downloadThroughput: 1600000,
-    uploadThroughput: 768000,
+    downloadThroughput: 1600000 / 8,
+    uploadThroughput: 768000 / 8,
   },
   fourg: {
     offline: false,
-    latency: 150,
-    downloadThroughput: 9000000,
-    uploadThroughput: 9000000,
+    latency: 170,
+    downloadThroughput: 9000000 / 8,
+    uploadThroughput: 9000000 / 8,
   },
   lte: {
     offline: false,
     latency: 70,
-    downloadThroughput: 12000000,
-    uploadThroughput: 12000000,
+    downloadThroughput: 12000000 / 8,
+    uploadThroughput: 12000000 / 8,
   },
 };
 
@@ -63,7 +66,7 @@ async function launchChromeAndRunLighthouse(url, opts, config) {
   // eslint-disable-next-line no-unused-vars
   const chrome = await chromeLauncher.launch({
     port: 9222,
-    logLevel: 'info',
+    logLevel: 'silent',
     chromeFlags: ['--headless', '--disable-gpu'],
   });
 
