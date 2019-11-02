@@ -1,4 +1,4 @@
-name: PR
+name: PR Tester
 
 on: [pull_request]
 
@@ -14,13 +14,6 @@ jobs:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com
           wptConnectionSpeed: threegfast
-      - name: With Budget.json
-        uses: ./
-        with:
-          secret: ${{ secrets.GITHUB_TOKEN }}
-          url: https://justinribeiro.com
-          wptConnectionSpeed: threegfast
-          lighthouseBudget: .github/test/budget.json
       - name: With custom-config.json
         uses: ./
         with:
@@ -35,6 +28,13 @@ jobs:
           wptConnectionSpeed: threegfast
           lighthouseBudget: .github/test/budget.json
           lighthouseConfiguration: .github/test/custom-config.json
+      - name: With Budget.json
+        uses: ./
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          url: https://justinribeiro.com
+          wptConnectionSpeed: threegfast
+          lighthouseBudget: .github/test/budget.json
       - name: No URL set
         uses: ./
         with:

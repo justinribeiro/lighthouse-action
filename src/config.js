@@ -21,7 +21,7 @@ function defaultLighthouseConfiguration(wptProfile) {
 function getLighthouseConfiguration(core) {
   const wptProfile = core.getInput('wptConnectionSpeed');
   let configuration;
-  const lhConfigurationFile = core.getInput('lighthouseConfiguration:');
+  const lhConfigurationFile = core.getInput('lighthouseConfiguration');
   try {
     if (
       lhConfigurationFile &&
