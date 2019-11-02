@@ -34,7 +34,53 @@ async function writeResultsToFileSystem(report, lhr, core) {
   core.setOutput('resultsPath', resultsPath);
 }
 
+async function postResultsToPullRequest(lhr, github, secret) {
+  let rows = '';
+  let timings = '';
+  Object.values(lhr.categories).forEach(cat => {
+    rows += `| ${cat.title} | ${cat.score * 100} | \n`;
+  });
+
+  [
+    'first-contentful-paint',
+    'first-meaningful-paint',
+    'max-potential-fid',
+    'interactive',
+    'first-cpu-idle',
+    'speed-index',
+  ].forEach(cat => {
+    timings += `| ${lhr.audits[cat].title} | ${lhr.audits[cat].displayValue} | \n`;
+  });
+
+  const data = `
+[Lighthouse](https://developers.google.com/web/tools/lighthouse/) report for the changes in this PR:
+| Category | Score |
+| ------------- | ------------- |
+${rows}
+
+| Measure | Timing |
+| ------------- | ------------- |
+${timings}
+
+_Tested with Lighthouse version: ${lhr.lighthouseVersion}_`;
+
+  const comment = await fetch(
+    github.context.payload.pull_request.comments_url,
+    {
+      method: 'post',
+      body: JSON.stringify({
+        body: data,
+      }),
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${secret}`,
+      },
+    },
+  );
+}
+
 module.exports = {
   writeResultsToConsole: writeResultsToConsole,
   writeResultsToFileSystem: writeResultsToFileSystem,
+  postResultsToPullRequest: postResultsToPullRequest,
 };

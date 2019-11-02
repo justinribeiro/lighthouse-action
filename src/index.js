@@ -1,5 +1,7 @@
 'use strict';
 
+import {postResultsToPullRequest} from './utils';
+
 const core = require('@actions/core');
 const github = require('@actions/github');
 
@@ -9,6 +11,7 @@ const {writeResultsToFileSystem, writeResultsToConsole} = require('./utils');
 
 async function main() {
   const url = core.getInput('url');
+  const secret = core.getInput('secret');
 
   const opts = {
     lighthouseConfig: {
@@ -29,10 +32,7 @@ async function main() {
   );
   writeResultsToConsole(lhr);
   writeResultsToFileSystem(report, lhr, core);
-
-  const payload = JSON.stringify(github.context.payload, undefined, 2);
-  console.log(`The event payload: ${payload}`);
-  console.log(github.context.payload.pull_request.comments_url);
+  postResultsToPullRequest(lhr, github, secret);
 }
 
 main()
