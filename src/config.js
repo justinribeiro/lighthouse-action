@@ -13,6 +13,10 @@ function defaultLighthouseConfiguration(wptProfile) {
     disableStorageReset: true,
     emulatedFormFactor: 'mobile',
     throttlingMethod: 'provided',
+    throttling: {
+      cpuSlowdownMultiplier: 4,
+    },
+    logLevel: 'info',
     connection: wptProfile || 'threegfast',
     output: 'html',
   };
