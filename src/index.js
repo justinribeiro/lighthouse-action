@@ -26,6 +26,7 @@ async function main() {
     emulatedFormFactor: 'mobile',
     throttlingMethod: 'provided',
     connection: wptProfile,
+    output: ['json', 'html'],
   };
 
   const {report, lhr} = await launchChromeAndRunLighthouse(
