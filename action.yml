@@ -5,6 +5,8 @@ inputs:
     description: 'Page URL'
   wptConnectionSpeed:
     description: 'WPT connection speed profile: twog, threegslow, threeg, threegfast, fourg, lte'
+  secret:
+    description: 'This should be the default secrets.GITHUB_TOKEN so that we can send comments to your PRs.'
 outputs:
   resultsPath:
     description: 'Path to the folder with Lighthouse audit results'
