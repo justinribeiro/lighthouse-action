@@ -1,7 +1,7 @@
 const {ensureDir} = require('fs-extra');
 const {join} = require('path');
 const {writeFile} = require('fs').promises;
-const {readFileSync} = require('fs');
+const fetch = require('node-fetch');
 const {
   getFilenamePrefix,
 } = require('lighthouse/lighthouse-core/lib/file-namer');

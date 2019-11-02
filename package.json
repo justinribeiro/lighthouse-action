@@ -17,6 +17,7 @@
     "@actions/github": "^1.1.0",
     "fs-extra": "^8.1.0",
     "lighthouse": "^5.4.0",
+    "node-fetch": "^2.6.0",
     "puppeteer-core": "^2.0.0"
   }
 }
