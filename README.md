@@ -7,9 +7,9 @@
 - Uses [Puppeteer](https://github.com/GoogleChrome/puppeteer) to start up Chrome with [network emulation settings defined by WebPageTest](https://github.com/WPO-Foundation/webpagetest/blob/master/www/settings/connectivity.ini.sample).
 - Supports saving of artifacts to the Github Action run.
 - Supports custom Lighthouse configuration via JavaScript file.
-- Supports custom Lighthouse budget.json files for failing PRs.
+- Supports Lighthouse budget.json for failing PRs.
 - Posts results of audit run as a comment on your PR.
-  ![image](https://user-images.githubusercontent.com/643503/68066171-d35dc800-fcf0-11e9-9c95-72b689fa7eef.png)
+  ![image](https://user-images.githubusercontent.com/643503/68077844-6e55b100-fd88-11e9-9fcb-8bc8f83319d4.png)
 
 ## Basic Usage
 
@@ -35,6 +35,37 @@ jobs:
           name: lighthouse-artifacts
           path: './results'
 ```
+
+## Advanced Usage
+
+If you don't want to use the WPT profiles or you want to customize your Lighthouse configuration with headers or custom runs, or you just want to use your existing lighthouse budget.json, this is available via the `lighthouseConfiguration` and `lighthouseBudget` options:
+
+```yml
+name: Audit Web Performance
+on: [pull_request]
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Generate Lighthouse Report
+        uses: justinribeiro/lighthouse-action@master
+        with:
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          url: https://justinribeiro.com/
+          lighthouseBudget: .github/test/budget.json
+          lighthouseConfiguration: .github/test/custom-config.json
+      - name: Saving Lighthouse Audit Artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: lighthouse-artifacts
+          path: './results'
+```
+
+For full details on how to define a lighthouse configuration file, see [Lighthouse Configuration](https://github.com/GoogleChrome/lighthouse/blob/master/docs/configuration.md) for more information.
+
+For full details on how to define a lighthouse budget.json file, see [Performance Budgets (Keep Request Counts Low And File Sizes Small)](https://developers.google.com/web/tools/lighthouse/audits/budgets) for more information.
 
 ## Inputs
 

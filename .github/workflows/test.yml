@@ -12,8 +12,8 @@ jobs:
         uses: ./
         with:
           secret: ${{ secrets.GITHUB_TOKEN }}
-          url: https://example.com/
-          wptConnectionSpeed: edge
+          url: https://justinribeiro.com/
+          wptConnectionSpeed: threeg
       - name: Saving Lighthouse Audit Artifacts
         uses: actions/upload-artifact@master
         with:
