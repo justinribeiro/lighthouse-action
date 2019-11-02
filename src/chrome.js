@@ -67,7 +67,7 @@ async function launchChromeAndRunLighthouse(url, opts, config) {
   });
 
   const browser = await puppeteer.connect({
-    browserUrl: 'http://localhost:9222',
+    browserURL: 'http://localhost:9222',
   });
 
   browser.on('targetchanged', async target => {
