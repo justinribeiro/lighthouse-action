@@ -65,7 +65,7 @@ ${rows}
 | ------------- | ------------- |
 ${timings}
 
-_Tested with Lighthouse version: ${lhr.lighthouseVersion}_`;
+_Tested with Lighthouse v${lhr.lighthouseVersion} via [lighthouse-action](https://github.com/justinribeiro/lighthouse-action)_`;
 
   const comment = await fetch(
     github.context.payload.pull_request.comments_url,
