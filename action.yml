@@ -1,5 +1,5 @@
 name: 'Web Performance Audits with Lighthouse'
-description: 'Audit web performance with Lighthouse and Github Actions.'
+description: 'Audit web performance with Lighthouse and post audit summary comment on a pull request.'
 inputs:
   url:
     description: 'Page URL'
@@ -18,5 +18,5 @@ runs:
   using: 'node12'
   main: 'src/index.js'
 branding:
-  icon: 'activity'
-  color: 'gray-dark'
+  icon: 'chrome'
+  color: 'blue'
