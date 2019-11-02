@@ -35,8 +35,3 @@ jobs:
           url: https://justinribeiro.com
           wptConnectionSpeed: threegfast
           lighthouseBudget: .github/test/budget.json
-      - name: No URL set
-        uses: ./
-        with:
-          secret: ${{ secrets.GITHUB_TOKEN }}
-          wptConnectionSpeed: threegfast
