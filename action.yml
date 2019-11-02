@@ -18,5 +18,5 @@ runs:
   using: 'node12'
   main: 'src/index.js'
 branding:
-  icon: 'chrome'
+  icon: 'aperture'
   color: 'blue'
