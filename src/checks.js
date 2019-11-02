@@ -9,7 +9,6 @@ function getOverBudgetItems(lhr) {
       !budget.details.items ||
       !budget.details.items.some(item => item.sizeOverBudget),
   );
-  console.log(!budget.details.items.some(item => item.sizeOverBudget));
 
   if (
     !budget.details ||
