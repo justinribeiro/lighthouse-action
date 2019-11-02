@@ -60,7 +60,13 @@ Based on your budget.json settings, the following audits have failed:
 `;
 
     budgetFailures.forEach(item => {
-      failures += `| ${item.label} | ${item.requestCount} | ${item.size} | ${item.countOverBudget} | ${item.sizeOverBudget} | \n`;
+      let countOverBudget;
+      if (!item.countOverBudget) {
+        countOverBudget = 'n/a';
+      } else {
+        countOverBudget = item.countOverBudget;
+      }
+      failures += `| ${item.label} | ${item.requestCount} | ${item.size} | ${countOverBudget} | ${item.sizeOverBudget} | \n`;
     });
   }
 

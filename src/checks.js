@@ -3,13 +3,6 @@
 function getOverBudgetItems(lhr) {
   const budget = lhr.audits['performance-budget'];
 
-  console.log(budget);
-  console.log(
-    !budget.details ||
-      !budget.details.items ||
-      !budget.details.items.some(item => item.sizeOverBudget),
-  );
-
   if (
     !budget.details ||
     !budget.details.items ||

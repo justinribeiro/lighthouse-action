@@ -19,7 +19,7 @@ jobs:
         with:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com
-          lighthouseConfiguration: .github/test/custom-config.json
+          lighthouseConfiguration: .github/test/custom-config.js
       - name: With everything
         uses: ./
         with:
