@@ -28,7 +28,7 @@ async function main() {
     core.warning('secret not defined; PR comment reporting disabled.');
   }
 
-  const opts = getLighthouseConfiguration();
+  const opts = getLighthouseConfiguration(core);
 
   const {report, lhr} = await launchChromeAndRunLighthouse(
     url,
