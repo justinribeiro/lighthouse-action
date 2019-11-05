@@ -17,6 +17,10 @@ const lighthouse = require('lighthouse');
 const DEVTOOLS_RTT_ADJUSTMENT_FACTOR = 3.75;
 const DEVTOOLS_THROUGHPUT_ADJUSTMENT_FACTOR = 0.9;
 
+// Per https://chromium.googlesource.com/chromium/src/+/8a4e4200086bc67a61c83d60edfb450844377e5a/third_party/WebKit/Source/devtools/front_end/network_conditions/NetworkConditionsSelector.js#222
+const CHROME_SLOW_RTT_ADJUSTMENT_FACTOR = 5;
+const CHROME_SLOW_THROUGHPUT_ADJUSTMENT_FACTOR = 0.8;
+
 /**
  * via WebPageTest settings
  * https://github.com/WPO-Foundation/webpagetest/blob/master/www/settings/connectivity.ini.sample
@@ -27,51 +31,65 @@ const NETWORK = {
     latency: 840,
     downloadThroughput: 240000,
     uploadThroughput: 240000,
+    rttAdjustFactor: CHROME_SLOW_RTT_ADJUSTMENT_FACTOR,
+    throughputAdjustment: CHROME_SLOW_THROUGHPUT_ADJUSTMENT_FACTOR,
   },
   twog: {
     offline: false,
     latency: 800,
     downloadThroughput: 280000,
     uploadThroughput: 256000,
+    rttAdjustFactor: CHROME_SLOW_RTT_ADJUSTMENT_FACTOR,
+    throughputAdjustment: CHROME_SLOW_THROUGHPUT_ADJUSTMENT_FACTOR,
   },
   threegslow: {
     offline: false,
     latency: 400,
     downloadThroughput: 400000,
     uploadThroughput: 400000,
+    rttAdjustFactor: CHROME_SLOW_RTT_ADJUSTMENT_FACTOR,
+    throughputAdjustment: CHROME_SLOW_THROUGHPUT_ADJUSTMENT_FACTOR,
   },
   threeg: {
     offline: false,
     latency: 300,
     downloadThroughput: 1600000,
     uploadThroughput: 768000,
+    rttAdjustFactor: DEVTOOLS_RTT_ADJUSTMENT_FACTOR,
+    throughputAdjustment: DEVTOOLS_THROUGHPUT_ADJUSTMENT_FACTOR,
   },
   threegfast: {
     offline: false,
     latency: 170,
     downloadThroughput: 1600000,
     uploadThroughput: 768000,
+    rttAdjustFactor: DEVTOOLS_RTT_ADJUSTMENT_FACTOR,
+    throughputAdjustment: DEVTOOLS_THROUGHPUT_ADJUSTMENT_FACTOR,
   },
   fourg: {
     offline: false,
     latency: 170,
     downloadThroughput: 9000000,
     uploadThroughput: 9000000,
+    rttAdjustFactor: DEVTOOLS_RTT_ADJUSTMENT_FACTOR,
+    throughputAdjustment: DEVTOOLS_THROUGHPUT_ADJUSTMENT_FACTOR,
   },
   lte: {
     offline: false,
     latency: 70,
     downloadThroughput: 12000000,
     uploadThroughput: 12000000,
+    rttAdjustFactor: DEVTOOLS_RTT_ADJUSTMENT_FACTOR,
+    throughputAdjustment: DEVTOOLS_THROUGHPUT_ADJUSTMENT_FACTOR,
   },
 };
 
-function withDevToolsThroughputAdjustment(bits) {
-  return Math.floor((bits / 8) * DEVTOOLS_THROUGHPUT_ADJUSTMENT_FACTOR);
+function withDevToolsThroughputAdjustment(bits, factor) {
+  return Math.floor((bits / 8) * factor);
 }
 
-function withDevToolsRttAdjustment(ms) {
-  return ms * DEVTOOLS_RTT_ADJUSTMENT_FACTOR;
+function withDevToolsRttAdjustment(ms, factor) {
+  return ms * factor;
 }
 
 /**
@@ -109,12 +127,15 @@ async function launchChromeAndRunLighthouse(url, opts, config) {
             offline: NETWORK[opts.connection].offline,
             latency: withDevToolsRttAdjustment(
               NETWORK[opts.connection].latency,
+              NETWORK[opts.connection].rttAdjustFactor,
             ),
             downloadThroughput: withDevToolsThroughputAdjustment(
               NETWORK[opts.connection].downloadThroughput,
+              NETWORK[opts.connection].throughputAdjustment,
             ),
             uploadThroughput: withDevToolsThroughputAdjustment(
               NETWORK[opts.connection].uploadThroughput,
+              NETWORK[opts.connection].throughputAdjustment,
             ),
           });
         })
