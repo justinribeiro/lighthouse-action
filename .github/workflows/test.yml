@@ -30,7 +30,7 @@ jobs:
         with:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com/
-          wptConnectionSpeed: threegfast
+          wptConnectionSpeed: twog
           lighthouseBudget: .github/test/budget.json
           lighthouseScoresBudget: .github/test/scores.js
       - name: With everything
