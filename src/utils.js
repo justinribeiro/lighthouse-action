@@ -7,9 +7,17 @@ const fetch = require('node-fetch');
 const {
   getFilenamePrefix,
 } = require('lighthouse/lighthouse-core/lib/file-namer');
-const {getOverBudgetItems} = require('./checks');
+const {getOverBudgetItems, getScoreBudgetItems} = require('./checks');
+const {getCustomLighthouseScoringBudget} = require('./config');
 
-function generateLogString(speed, rows, timings, failures, version) {
+function generateLogString(
+  speed,
+  rows,
+  timings,
+  failures,
+  scoreFailures,
+  version,
+) {
   return `
 [Lighthouse](https://developers.google.com/web/tools/lighthouse/) report for the changes in this PR:
 
@@ -25,13 +33,16 @@ ${timings}
 
 ${failures}
 
+${scoreFailures}
+
 _Tested with Lighthouse v${version} via [lighthouse-action](https://github.com/justinribeiro/lighthouse-action)_`;
 }
 
-function parseLighthouseResultsToString(lhr, speed) {
+function parseLighthouseResultsToString(core, lhr, speed) {
   let rows = '';
   let timings = '';
   let failures = '';
+  let scoreFailures = '';
 
   Object.values(lhr.categories).forEach(cat => {
     rows += `| ${cat.title} | ${cat.score * 100} | \n`;
@@ -70,17 +81,39 @@ Based on your budget.json settings, the following audits have failed:
     });
   }
 
+  const scoresBudget = getCustomLighthouseScoringBudget(core);
+  let scoreBudgetFailures;
+  if (scoresBudget) {
+    scoreBudgetFailures = getScoreBudgetItems(lhr, scoresBudget);
+  } else {
+    scoreBudgetFailures = [];
+  }
+
+  if (scoreBudgetFailures.length > 0) {
+    scoreFailures = `
+Based on your scores.js settings, the following audits have failed:
+
+| Audit / Category | Score / Value | Expected |
+| ------------- | ------------- | ------------- |
+`;
+
+    scoreBudgetFailures.forEach(item => {
+      scoreFailures += `| ${item.label} | ${item.score} | ${item.expected} | \n`;
+    });
+  }
+
   return generateLogString(
     speed,
     rows,
     timings,
     failures,
+    scoreFailures,
     lhr.lighthouseVersion,
   );
 }
 
-function writeResultsToConsole(lhr, speed) {
-  const string = parseLighthouseResultsToString(lhr, speed);
+function writeResultsToConsole(core, lhr, speed) {
+  const string = parseLighthouseResultsToString(core, lhr, speed);
   console.log(string);
 }
 
@@ -93,8 +126,8 @@ async function writeResultsToFileSystem(report, lhr, core) {
   core.setOutput('resultsPath', resultsPath);
 }
 
-async function postResultsToPullRequest(lhr, speed, github, secret) {
-  const string = parseLighthouseResultsToString(lhr, speed);
+async function postResultsToPullRequest(core, lhr, speed, github, secret) {
+  const string = parseLighthouseResultsToString(core, lhr, speed);
 
   if (github.context.payload.pull_request.comments_url && secret) {
     await fetch(github.context.payload.pull_request.comments_url, {
