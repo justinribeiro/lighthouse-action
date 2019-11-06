@@ -8,6 +8,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
+      - name: With Budget.json + Scores.js
+        uses: ./
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          url: https://justinribeiro.com/
+          wptConnectionSpeed: twog
+          lighthouseBudget: .github/test/budget.json
+          lighthouseScoringBudget: .github/test/scores.js
       - name: Generic Default Setup
         uses: ./
         with:
@@ -25,13 +33,6 @@ jobs:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com/
           lighthouseConfiguration: .github/test/custom-config.js
-      - name: With Budget.json
-        uses: ./
-        with:
-          secret: ${{ secrets.GITHUB_TOKEN }}
-          url: https://justinribeiro.com/
-          wptConnectionSpeed: threegfast
-          lighthouseBudget: .github/test/budget.json
       - name: With everything
         uses: ./
         with:

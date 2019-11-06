@@ -63,6 +63,21 @@ function getCustomLighthouseBudget(core) {
   }
 }
 
+function getCustomLighthouseScoringBudget(core) {
+  const lhScoringBudgetFile = core.getInput('lighthouseScoringBudget');
+  try {
+    if (
+      lhScoringBudgetFile &&
+      fs.existsSync(join(process.cwd(), lhScoringBudgetFile))
+    ) {
+      return require(join(process.cwd(), lhScoringBudgetFile));
+    }
+  } catch (error) {
+    return null;
+  }
+}
+
 module.exports = {
   getLighthouseConfiguration: getLighthouseConfiguration,
+  getCustomLighthouseScoringBudget: getCustomLighthouseScoringBudget,
 };

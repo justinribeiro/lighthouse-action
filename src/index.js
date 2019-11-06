@@ -36,9 +36,9 @@ async function main() {
     opts.lighthouseConfig,
   );
 
-  writeResultsToConsole(lhr, wptProfile);
+  writeResultsToConsole(core, lhr, wptProfile);
   await writeResultsToFileSystem(report, lhr, core);
-  await postResultsToPullRequest(lhr, wptProfile, github, secret);
+  await postResultsToPullRequest(core, lhr, wptProfile, github, secret);
   checkIfActionShouldFail(lhr, core);
 }
 
