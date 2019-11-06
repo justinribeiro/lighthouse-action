@@ -8,8 +8,9 @@
 - Supports saving of artifacts to the Github Action run.
 - Supports custom Lighthouse configuration via JavaScript file.
 - Supports Lighthouse budget.json for failing PRs.
+- Supports Lighthouse-based data model scores.js for failing PRs based on _any_ audit score or category.
 - Posts results of audit run as a comment on your PR.
-  ![image](https://user-images.githubusercontent.com/643503/68077844-6e55b100-fd88-11e9-9fcb-8bc8f83319d4.png)
+  ![image](https://user-images.githubusercontent.com/643503/68270529-5729f400-0012-11ea-8fa9-e3eaeb2ee6f5.png)
 
 ## General Disclaimer
 
@@ -67,6 +68,7 @@ jobs:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com/
           lighthouseBudget: .github/test/budget.json
+          lighthouseScoringBudget: .github/test/scores.js
           lighthouseConfiguration: .github/test/custom-config.js
       - name: Saving Lighthouse Audit Artifacts
         uses: actions/upload-artifact@master
@@ -79,7 +81,49 @@ For full details on how to define a lighthouse configuration file, see [Lighthou
 
 For full details on how to define a lighthouse budget.json file, see [Performance Budgets (Keep Request Counts Low And File Sizes Small)](https://developers.google.com/web/tools/lighthouse/audits/budgets) for more information.
 
-For a live example of this action in practice, see [my blog-pwa repo workflow](https://github.com/justinribeiro/blog-pwa/blob/master/.github/workflows/main.yml).
+## Using scores.js to increase your audit power
+
+`scores.js` is based on the Lighthouse JSON output data model and maps one-to-one with the existing keys and definitions within lighthouse. This allows an easy to use, vastly configurable file to test any audit score or raw numeric value that you find important. No having to wait for me to add special parameters. :-)
+
+Let's look at an example `scores.js` file:
+
+```
+module.exports = {
+  audits: {
+    'service-worker': {
+      score: 1,
+    },
+    'first-contentful-paint': {
+      score: 1,
+      numericValue: 100,
+    },
+    'first-meaningful-paint': {
+      score: 1,
+      numericValue: 100,
+    },
+  },
+  categories: {
+    performance: {
+      score: 0.95,
+    },
+    accessibility: {
+      score: 0.95,
+    },
+  },
+};
+```
+
+In this case we can test for either one or two specific keys:
+
+1. `score`: decimal ranging from 0 to 1. If you wanted to verify that your performance is above 95, you'd enter 0.95 like above.
+2. `numericValue`: decimal starting at zero. Commonly holds the value out of the trace in milliseconds, good for testing if you want those raw performance numbers.
+
+For a full view of available audits and categories, output a JSON file from the lighthouse cli to get started:
+
+```
+$ lighthouse --output json --output-path=./sample.json --chrome-flags="--headless" https://YOUR_URL_HERE.com
+
+```
 
 ## Inputs
 
@@ -105,11 +149,19 @@ _Optional_ File path to custom lighthouse configuration JavaScript file. See [Li
 
 _Optional_ File path to custom budget.json file; will fail PRs based on budget result. See [Performance Budgets (Keep Request Counts Low And File Sizes Small)](https://developers.google.com/web/tools/lighthouse/audits/budgets) for more information.
 
+### `lighthouseScoringBudget`
+
+_Optional_ File path to custom scores.js file; will fail PRs based on scoring result. See the above section in this README "Using scores.js to increase your audit power" for more information.
+
 ## Outputs
 
 ### `resultsPath`
 
 Path to the folder with Lighthouse audit results.
+
+## Live example
+
+For a live example of this action in practice, see [my blog-pwa repo workflow](https://github.com/justinribeiro/blog-pwa/blob/master/.github/workflows/main.yml).
 
 ## Why I built this
 
