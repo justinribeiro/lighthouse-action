@@ -79,4 +79,5 @@ function getCustomLighthouseScoringBudget(core) {
 
 module.exports = {
   getLighthouseConfiguration: getLighthouseConfiguration,
+  getCustomLighthouseScoringBudget: getCustomLighthouseScoringBudget,
 };
