@@ -45,7 +45,7 @@ function parseLighthouseResultsToString(core, lhr, speed) {
   let scoreFailures = '';
 
   Object.values(lhr.categories).forEach(cat => {
-    rows += `| ${cat.title} | ${cat.score * 100} | \n`;
+    rows += `| ${cat.title} | ${Math.round((cat.score * 100) * 100)/100} | \n`;
   });
 
   [
