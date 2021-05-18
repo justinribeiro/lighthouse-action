@@ -10,6 +10,8 @@ const {
   postResultsToPullRequest,
   writeResultsToFileSystem,
   writeResultsToConsole,
+  postResultsToCommit,
+  isPullRequest,
 } = require('./utils');
 const {checkIfActionShouldFail} = require('./checks');
 
@@ -38,7 +40,11 @@ async function main() {
 
   writeResultsToConsole(core, lhr, wptProfile);
   await writeResultsToFileSystem(report, lhr, core);
-  await postResultsToPullRequest(core, lhr, wptProfile, github, secret);
+  if (isPullRequest(github)) {
+    await postResultsToPullRequest(core, lhr, wptProfile, github, secret);
+  } else {
+    await postResultsToCommit(core, lhr, wptProfile, github, secret);
+  }
   checkIfActionShouldFail(lhr, core);
 }
 

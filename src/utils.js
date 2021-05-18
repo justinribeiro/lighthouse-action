@@ -129,7 +129,11 @@ async function writeResultsToFileSystem(report, lhr, core) {
 async function postResultsToPullRequest(core, lhr, speed, github, secret) {
   const string = parseLighthouseResultsToString(core, lhr, speed);
 
-  if (github.context.payload.pull_request.comments_url && secret) {
+  if (
+    github.context.payload.pull_request &&
+    github.context.payload.pull_request.comments_url &&
+    secret
+  ) {
     await fetch(github.context.payload.pull_request.comments_url, {
       method: 'post',
       body: JSON.stringify({
@@ -143,8 +147,35 @@ async function postResultsToPullRequest(core, lhr, speed, github, secret) {
   }
 }
 
+function isPullRequest(github) {
+  return github.context.eventName === 'pull_request';
+}
+
+async function postResultsToCommit(core, lhr, speed, github, secret) {
+  const string = parseLighthouseResultsToString(core, lhr, speed);
+  const sha = github.context.sha;
+
+  const githubClient = github.getOctokit(secret);
+
+  const commitCommentParams = {
+    owner: github.context.repo.owner,
+    repo: github.context.repo.repo,
+    commit_sha: sha,
+    body: string,
+  };
+
+  try {
+    // Comment to the commit
+    await githubClient.repos.createCommitComment(commitCommentParams);
+  } catch (err) {
+    console.error(err, JSON.stringify(commitCommentParams, null, 2));
+  }
+}
+
 module.exports = {
   writeResultsToConsole: writeResultsToConsole,
   writeResultsToFileSystem: writeResultsToFileSystem,
   postResultsToPullRequest: postResultsToPullRequest,
+  postResultsToCommit: postResultsToCommit,
+  isPullRequest: isPullRequest,
 };
