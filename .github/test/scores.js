@@ -5,11 +5,11 @@ module.exports = {
     },
     'first-contentful-paint': {
       score: 1,
-      numericValue: 100,
+      numericValue: 1000,
     },
     'first-meaningful-paint': {
       score: 1,
-      numericValue: 100,
+      numericValue: 1000,
     },
   },
   categories: {
