@@ -13,7 +13,7 @@ jobs:
         with:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com/
-          wptConnectionSpeed: twog
+          wptConnectionSpeed: lte
           lighthouseBudget: .github/test/budget.json
           lighthouseScoringBudget: .github/test/scores.js
       - name: Generic Default Setup
