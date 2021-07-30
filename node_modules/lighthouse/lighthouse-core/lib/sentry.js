@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -76,7 +76,7 @@ function init(opts) {
       if (!err) return;
 
       // Ignore expected errors
-      // @ts-ignore Non-standard property added to flag error as not needing capturing.
+      // @ts-expect-error Non-standard property added to flag error as not needing capturing.
       if (err.expected) return;
 
       const tags = opts.tags || {};
@@ -96,11 +96,15 @@ function init(opts) {
       const sampledErrorMatch = SAMPLED_ERRORS.find(sample => sample.pattern.test(err.message));
       if (sampledErrorMatch && sampledErrorMatch.rate <= Math.random()) return;
 
-      // Protocol errors all share same stack trace, so add more to fingerprint
-      // @ts-ignore - properties added to protocol method LHErrors.
+      // @ts-expect-error - properties added to protocol method LHErrors.
       if (err.protocolMethod) {
-        // @ts-ignore - properties added to protocol method LHErrors.
+        // Protocol errors all share same stack trace, so add more to fingerprint
+        // @ts-expect-error - properties added to protocol method LHErrors.
         opts.fingerprint = ['{{ default }}', err.protocolMethod, err.protocolError];
+
+        opts.tags = opts.tags || {};
+        // @ts-expect-error - properties added to protocol method LHErrors.
+        opts.tags.protocolMethod = err.protocolMethod;
       }
 
       return new Promise(resolve => {
@@ -110,7 +114,7 @@ function init(opts) {
 
     const context = Object.assign({
       url: opts.url,
-      emulatedFormFactor: opts.flags.emulatedFormFactor,
+      formFactor: opts.flags.formFactor,
       throttlingMethod: opts.flags.throttlingMethod,
     }, opts.flags.throttling);
     Sentry.mergeContext({extra: Object.assign({}, opts.environmentData.extra, context)});

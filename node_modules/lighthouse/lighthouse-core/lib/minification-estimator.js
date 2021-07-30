@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -7,7 +7,7 @@
 
 // https://www.ecma-international.org/ecma-262/9.0/index.html#sec-punctuators
 // eslint-disable-next-line max-len
-const PUNCTUATOR_REGEX = /(return|{|\(|\[|\.\.\.|;|,|<|>|<=|>=|==|!=|===|!==|\+|-|\*|%|\*\*|\+\+|--|<<|>>|>>>|&|\||\^|!|~|&&|\|\||\?|:|=|\+=|-=|\*=|%=|\*\*=|<<=|>>=|>>>=|&=|\|=|\^=|=>|\/|\/=|\})$/;
+const PUNCTUATOR_REGEX = /(return|case|{|\(|\[|\.\.\.|;|,|<|>|<=|>=|==|!=|===|!==|\+|-|\*|%|\*\*|\+\+|--|<<|>>|>>>|&|\||\^|!|~|&&|\|\||\?|:|=|\+=|-=|\*=|%=|\*\*=|<<=|>>=|>>>=|&=|\|=|\^=|=>|\/|\/=|\})$/;
 const WHITESPACE_REGEX = /( |\n|\t)+$/;
 
 /**
@@ -50,6 +50,12 @@ function computeTokenLength(content, features) {
   let isInRegexCharacterClass = false;
   let stringOpenChar = null;
 
+  /**
+   * Acts as stack for brace tracking.
+   * @type {('templateBrace'|'normalBrace')[]}
+   */
+  const templateLiteralDepth = [];
+
   for (let i = 0; i < content.length; i++) {
     const twoChars = content.substr(i, 2);
     const char = twoChars.charAt(0);
@@ -78,7 +84,13 @@ function computeTokenLength(content, features) {
       // String characters count
       totalTokenLength++;
 
-      if (char === '\\') {
+      if (stringOpenChar === '`' && twoChars === '${') {
+        // Start new template literal
+        templateLiteralDepth.push('templateBrace');
+        isInString = false;
+        totalTokenLength++;
+        i++;
+      } else if (char === '\\') {
         // Skip over any escaped characters
         totalTokenLength++;
         i++;
@@ -128,6 +140,18 @@ function computeTokenLength(content, features) {
         // Start the regex
         isInRegex = true;
         // Regex characters count
+        totalTokenLength++;
+      } else if (char === '{' && templateLiteralDepth.length) {
+        // Start normal code brace if inside a template literal
+        templateLiteralDepth.push('normalBrace');
+        totalTokenLength++;
+      } else if (char === '}' && templateLiteralDepth.length) {
+        // End one template literal if closing brace is for a template literal
+        if (templateLiteralDepth[templateLiteralDepth.length - 1] === 'templateBrace') {
+          isInString = true;
+          stringOpenChar = '`';
+        }
+        templateLiteralDepth.pop();
         totalTokenLength++;
       } else if (isAStringOpenChar) {
         // Start the string

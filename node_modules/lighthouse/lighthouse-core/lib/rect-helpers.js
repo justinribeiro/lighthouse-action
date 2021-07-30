@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -21,17 +21,18 @@ function rectContainsPoint(rect, {x, y}) {
  */
 // We sometimes run this as a part of a gatherer script injected into the page, so prevent
 // renaming the function for code coverage.
-/* istanbul ignore next */
+/* c8 ignore start */
 function rectContains(rect1, rect2) {
   return rect2.top >= rect1.top &&
     rect2.right <= rect1.right &&
     rect2.bottom <= rect1.bottom &&
     rect2.left >= rect1.left;
 }
+/* c8 ignore stop */
 
 /**
  * @param {LH.Artifacts.Rect[]} rects
- * @returns {LH.Artifacts.Rect[]}
+ * @return {LH.Artifacts.Rect[]}
  */
 function filterOutTinyRects(rects) {
   return rects.filter(
@@ -41,7 +42,7 @@ function filterOutTinyRects(rects) {
 
 /**
  * @param {LH.Artifacts.Rect[]} rects
- * @returns {LH.Artifacts.Rect[]}
+ * @return {LH.Artifacts.Rect[]}
  */
 function filterOutRectsContainedByOthers(rects) {
   const rectsToKeep = new Set(rects);
@@ -63,18 +64,19 @@ function filterOutRectsContainedByOthers(rects) {
 /**
  * @param {LH.Artifacts.Rect} rect
  */
-/* istanbul ignore next */
+/* c8 ignore start */
 function getRectCenterPoint(rect) {
   return {
     x: rect.left + rect.width / 2,
     y: rect.top + rect.height / 2,
   };
 }
+/* c8 ignore stop */
 
 /**
  * @param {LH.Artifacts.Rect} rectA
  * @param {LH.Artifacts.Rect} rectB
- * @returns {boolean}
+ * @return {boolean}
  */
 function rectsTouchOrOverlap(rectA, rectB) {
   // https://stackoverflow.com/questions/2752349/fast-rectangle-to-rectangle-intersection
@@ -194,15 +196,16 @@ function getRectAtCenter(rect, centerRectSize) {
 /**
  * @param {LH.Artifacts.Rect} rect
  */
-/* istanbul ignore next */
+/* c8 ignore start */
 function getRectArea(rect) {
   return rect.width * rect.height;
 }
+/* c8 ignore stop */
 
 /**
  * @param {LH.Artifacts.Rect[]} rects
  */
-/* istanbul ignore next */
+/* c8 ignore start */
 function getLargestRect(rects) {
   let largestRect = rects[0];
   for (const rect of rects) {
@@ -212,6 +215,7 @@ function getLargestRect(rects) {
   }
   return largestRect;
 }
+/* c8 ignore stop */
 
 /**
  *

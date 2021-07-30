@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -40,7 +40,7 @@ const UIStrings = {
   failureTitle: 'robots.txt is not valid',
   /** Description of a Lighthouse audit that tells the user *why* they need to have a valid robots.txt file. Note: "robots.txt" is a canonical filename and should not be translated. This is displayed after a user expands the section to see more. No character length limits. */
   description: 'If your robots.txt file is malformed, crawlers may not be able to understand ' +
-  'how you want your website to be crawled or indexed. [Learn more](https://web.dev/robots-txt).',
+  'how you want your website to be crawled or indexed. [Learn more](https://web.dev/robots-txt/).',
   /**
    * @description Label for the audit identifying that the robots.txt request has returned a specific HTTP status code. Note: "robots.txt" is a canonical filename and should not be translated.
    * @example {500} statusCode
@@ -101,7 +101,7 @@ function verifyDirective(directiveName, directiveValue) {
 /**
  * @param {string} line single line from a robots.txt file
  * @throws will throw an exception if given line has errors
- * @returns {{directive: string, value: string}|null}
+ * @return {{directive: string, value: string}|null}
  */
 function parseLine(line) {
   const hashIndex = line.indexOf('#');
@@ -135,7 +135,7 @@ function parseLine(line) {
 
 /**
  * @param {string} content
- * @returns {Array<{index: string, line: string, message: string}>}
+ * @return {Array<{index: string, line: string, message: string}>}
  */
 function validateRobots(content) {
   /**

@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2019 Google Inc. All Rights Reserved.
+ * @license Copyright 2019 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -24,6 +24,11 @@ const toplevelTaskNames = new Set([
   'TaskQueueManager::ProcessTaskFromWorkQueue', // m65 and below
 ]);
 
+const traceCategoriesToAlwaysKeep = new Set([
+  // Labels the threads correctly in DevTools Performance panel
+  '__metadata',
+]);
+
 const traceEventsToAlwaysKeep = new Set([
   'Screenshot',
   'TracingStartedInBrowser',
@@ -37,11 +42,20 @@ const traceEventsToAlwaysKeep = new Set([
   'ResourceFinish',
   'ResourceReceivedData',
   'EventDispatch',
+  'LayoutShift',
+  'FrameCommittedInBrowser',
+  // Not currently used by Lighthouse but might be used in the future for cross-frame LCP
+  'NavStartToLargestContentfulPaint::Invalidate::AllFrames::UKM',
+  'NavStartToLargestContentfulPaint::Candidate::AllFrames::UKM',
+  // Needed for CPU profiler task attribution
+  'Profile',
+  'ProfileChunk',
 ]);
 
 const traceEventsToKeepInToplevelTask = new Set([
   // Needed for CPU node timing simulations
   'Layout',
+  'RunMicrotasks',
   // All of these are needed to create graph relationships
   'TimerInstall',
   'TimerFire',
@@ -58,14 +72,20 @@ const traceEventsToKeepInToplevelTask = new Set([
 const traceEventsToKeepInProcess = new Set([
   ...toplevelTaskNames,
   ...traceEventsToKeepInToplevelTask,
+
+  // See the DevTools marker events
+  // https://source.chromium.org/chromium/chromium/src/+/main:third_party/devtools-frontend/src/front_end/timeline_model/TimelineModel.js?q=-f:out%20f:TimelineModel%20%22MarkLoad:%20%27%22&ss=chromium
   'firstPaint',
   'firstContentfulPaint',
   'firstMeaningfulPaint',
   'firstMeaningfulPaintCandidate',
   'loadEventEnd',
+  'MarkLoad',
   'domContentLoadedEventEnd',
+  'MarkDOMContent',
   'largestContentfulPaint::Invalidate',
   'largestContentfulPaint::Candidate',
+  'Animation',
 ]);
 
 /**
@@ -77,6 +97,7 @@ function filterOutUnnecessaryTasksByNameAndDuration(events) {
   return events.filter(evt => {
     if (toplevelTaskNames.has(evt.name) && evt.dur < 1000) return false;
     if (evt.pid === pid && traceEventsToKeepInProcess.has(evt.name)) return true;
+    if (traceCategoriesToAlwaysKeep.has(evt.cat)) return true;
     return traceEventsToAlwaysKeep.has(evt.name);
   });
 }

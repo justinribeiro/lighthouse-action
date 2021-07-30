@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -10,6 +10,7 @@ const TcpConnection = require('./tcp-connection.js');
 const ConnectionPool = require('./connection-pool.js');
 const DNSCache = require('./dns-cache.js');
 const mobileSlow4G = require('../../../config/constants.js').throttling.mobileSlow4G;
+const SimulatorTimingMap = require('./simulator-timing-map.js');
 
 /** @typedef {BaseNode.Node} Node */
 /** @typedef {import('../network-node')} NetworkNode */
@@ -27,6 +28,15 @@ const NodeState = {
   ReadyToStart: 1,
   InProgress: 2,
   Complete: 3,
+};
+
+/** @type {Record<NetworkNode['record']['priority'], number>} */
+const PriorityStartTimePenalty = {
+  VeryHigh: 0,
+  High: 0.25,
+  Medium: 0.5,
+  Low: 1,
+  VeryLow: 2,
 };
 
 /** @type {Map<string, LH.Gatherer.Simulation.Result['nodeTimings']>} */
@@ -60,19 +70,22 @@ class Simulator {
     this._cpuSlowdownMultiplier = this._options.cpuSlowdownMultiplier;
     this._layoutTaskMultiplier = this._cpuSlowdownMultiplier * this._options.layoutTaskMultiplier;
     /** @type {Array<Node>} */
-    this._cachedNodeListByStartTime = [];
+    this._cachedNodeListByStartPosition = [];
 
     // Properties reset on every `.simulate` call but duplicated here for type checking
     this._flexibleOrdering = false;
-    /** @type {Map<Node, NodeTimingIntermediate>} */
-    this._nodeTimings = new Map();
+    this._nodeTimings = new SimulatorTimingMap();
     /** @type {Map<string, number>} */
     this._numberInProgressByType = new Map();
     /** @type {Record<number, Set<Node>>} */
     this._nodes = {};
     this._dns = new DNSCache({rtt: this._rtt});
-    // @ts-ignore
-    this._connectionPool = /** @type {ConnectionPool} */ (null);
+    /** @type {ConnectionPool} */
+    // @ts-expect-error
+    this._connectionPool = null;
+
+    if (!Number.isFinite(this._rtt)) throw new Error(`Invalid rtt ${this._rtt}`);
+    if (!Number.isFinite(this._throughput)) throw new Error(`Invalid rtt ${this._throughput}`);
   }
 
   /** @return {number} */
@@ -99,11 +112,11 @@ class Simulator {
    * Initializes the various state data structures such _nodeTimings and the _node Sets by state.
    */
   _initializeAuxiliaryData() {
-    this._nodeTimings = new Map();
+    this._nodeTimings = new SimulatorTimingMap();
     this._numberInProgressByType = new Map();
 
     this._nodes = {};
-    this._cachedNodeListByStartTime = [];
+    this._cachedNodeListByStartPosition = [];
     // NOTE: We don't actually need *all* of these sets, but the clarity that each node progresses
     // through the system is quite nice.
     for (const state of Object.values(NodeState)) {
@@ -121,38 +134,19 @@ class Simulator {
 
   /**
    * @param {Node} node
-   * @param {NodeTimingIntermediate} values
-   */
-  _setTimingData(node, values) {
-    const timingData = this._nodeTimings.get(node) || {};
-    Object.assign(timingData, values);
-    this._nodeTimings.set(node, timingData);
-  }
-
-  /**
-   * @param {Node} node
-   * @return {NodeTimingIntermediate}
-   */
-  _getTimingData(node) {
-    const timingData = this._nodeTimings.get(node);
-    if (!timingData) throw new Error(`Unable to get timing data for node ${node.id}`);
-    return timingData;
-  }
-
-  /**
-   * @param {Node} node
    * @param {number} queuedTime
    */
   _markNodeAsReadyToStart(node, queuedTime) {
-    const firstNodeIndexWithGreaterStartTime = this._cachedNodeListByStartTime
-      .findIndex(candidate => candidate.startTime > node.startTime);
-    const insertionIndex = firstNodeIndexWithGreaterStartTime === -1 ?
-      this._cachedNodeListByStartTime.length : firstNodeIndexWithGreaterStartTime;
-    this._cachedNodeListByStartTime.splice(insertionIndex, 0, node);
+    const nodeStartPosition = Simulator._computeNodeStartPosition(node);
+    const firstNodeIndexWithGreaterStartPosition = this._cachedNodeListByStartPosition
+      .findIndex(candidate => Simulator._computeNodeStartPosition(candidate) > nodeStartPosition);
+    const insertionIndex = firstNodeIndexWithGreaterStartPosition === -1 ?
+      this._cachedNodeListByStartPosition.length : firstNodeIndexWithGreaterStartPosition;
+    this._cachedNodeListByStartPosition.splice(insertionIndex, 0, node);
 
     this._nodes[NodeState.ReadyToStart].add(node);
     this._nodes[NodeState.NotReadyToStart].delete(node);
-    this._setTimingData(node, {queuedTime});
+    this._nodeTimings.setReadyToStart(node, {queuedTime});
   }
 
   /**
@@ -160,13 +154,13 @@ class Simulator {
    * @param {number} startTime
    */
   _markNodeAsInProgress(node, startTime) {
-    const indexOfNodeToStart = this._cachedNodeListByStartTime.indexOf(node);
-    this._cachedNodeListByStartTime.splice(indexOfNodeToStart, 1);
+    const indexOfNodeToStart = this._cachedNodeListByStartPosition.indexOf(node);
+    this._cachedNodeListByStartPosition.splice(indexOfNodeToStart, 1);
 
     this._nodes[NodeState.InProgress].add(node);
     this._nodes[NodeState.ReadyToStart].delete(node);
     this._numberInProgressByType.set(node.type, this._numberInProgress(node.type) + 1);
-    this._setTimingData(node, {startTime});
+    this._nodeTimings.setInProgress(node, {startTime});
   }
 
   /**
@@ -177,7 +171,7 @@ class Simulator {
     this._nodes[NodeState.Complete].add(node);
     this._nodes[NodeState.InProgress].delete(node);
     this._numberInProgressByType.set(node.type, this._numberInProgress(node.type) - 1);
-    this._setTimingData(node, {endTime});
+    this._nodeTimings.setCompleted(node, {endTime});
 
     // Try to add all its dependents to the queue
     for (const dependent of node.getDependents()) {
@@ -203,9 +197,9 @@ class Simulator {
   /**
    * @return {Node[]}
    */
-  _getNodesSortedByStartTime() {
+  _getNodesSortedByStartPosition() {
     // Make a copy so we don't skip nodes due to concurrent modification
-    return Array.from(this._cachedNodeListByStartTime);
+    return Array.from(this._cachedNodeListByStartPosition);
   }
 
   /**
@@ -217,7 +211,6 @@ class Simulator {
       // Start a CPU task if there's no other CPU task in process
       if (this._numberInProgress(node.type) === 0) {
         this._markNodeAsInProgress(node, totalElapsedTime);
-        this._setTimingData(node, {timeElapsed: 0});
       }
 
       return;
@@ -225,8 +218,8 @@ class Simulator {
 
     if (node.type !== BaseNode.TYPES.NETWORK) throw new Error('Unsupported');
 
-    // If a network request is cached, we can always start it, so skip the connection checks
-    if (!node.fromDiskCache) {
+    // If a network request is connectionless, we can always start it, so skip the connection checks
+    if (!node.isConnectionless) {
       // Start a network request if we're not at max requests and a connection is available
       const numberOfActiveRequests = this._numberInProgress(node.type);
       if (numberOfActiveRequests >= this._maximumConcurrentRequests) return;
@@ -235,11 +228,6 @@ class Simulator {
     }
 
     this._markNodeAsInProgress(node, totalElapsedTime);
-    this._setTimingData(node, {
-      timeElapsed: 0,
-      timeElapsedOvershoot: 0,
-      bytesDownloaded: 0,
-    });
   }
 
   /**
@@ -272,7 +260,7 @@ class Simulator {
    * @return {number}
    */
   _estimateCPUTimeRemaining(cpuNode) {
-    const timingData = this._getTimingData(cpuNode);
+    const timingData = this._nodeTimings.getCpuStarted(cpuNode);
     const multiplier = cpuNode.didPerformLayout()
       ? this._layoutTaskMultiplier
       : this._cpuSlowdownMultiplier;
@@ -281,7 +269,7 @@ class Simulator {
       DEFAULT_MAXIMUM_CPU_TASK_DURATION
     );
     const estimatedTimeElapsed = totalDuration - timingData.timeElapsed;
-    this._setTimingData(cpuNode, {estimatedTimeElapsed});
+    this._nodeTimings.setCpuEstimated(cpuNode, {estimatedTimeElapsed});
     return estimatedTimeElapsed;
   }
 
@@ -291,14 +279,21 @@ class Simulator {
    */
   _estimateNetworkTimeRemaining(networkNode) {
     const record = networkNode.record;
-    const timingData = this._getTimingData(networkNode);
+    const timingData = this._nodeTimings.getNetworkStarted(networkNode);
 
     let timeElapsed = 0;
     if (networkNode.fromDiskCache) {
-      // Rough access time for seeking to location on disk and reading sequentially = 8ms + 20ms/MB
+      // Rough access time for seeking to location on disk and reading sequentially.
+      // 8ms per seek + 20ms/MB
       // @see http://norvig.com/21-days.html#answers
       const sizeInMb = (record.resourceSize || 0) / 1024 / 1024;
       timeElapsed = 8 + 20 * sizeInMb - timingData.timeElapsed;
+    } else if (networkNode.isNonNetworkProtocol) {
+      // Estimates for the overhead of a data URL in Chromium and the decoding time for base64-encoded data.
+      // 2ms per request + 10ms/MB
+      // @see traces on https://dopiaza.org/tools/datauri/examples/index.php
+      const sizeInMb = (record.resourceSize || 0) / 1024 / 1024;
+      timeElapsed = 2 + 10 * sizeInMb - timingData.timeElapsed;
     } else {
       const connection = this._connectionPool.acquireActiveConnectionFromRecord(record);
       const dnsResolutionTime = this._dns.getTimeUntilResolution(record, {
@@ -315,7 +310,7 @@ class Simulator {
     }
 
     const estimatedTimeElapsed = timeElapsed + timingData.timeElapsedOvershoot;
-    this._setTimingData(networkNode, {estimatedTimeElapsed});
+    this._nodeTimings.setNetworkEstimated(networkNode, {estimatedTimeElapsed});
     return estimatedTimeElapsed;
   }
 
@@ -339,16 +334,17 @@ class Simulator {
    * @param {number} totalElapsedTime
    */
   _updateProgressMadeInTimePeriod(node, timePeriodLength, totalElapsedTime) {
-    const timingData = this._getTimingData(node);
+    const timingData = this._nodeTimings.getInProgress(node);
     const isFinished = timingData.estimatedTimeElapsed === timePeriodLength;
 
-    if (node.type === BaseNode.TYPES.CPU || node.fromDiskCache) {
+    if (node.type === BaseNode.TYPES.CPU || node.isConnectionless) {
       return isFinished
         ? this._markNodeAsComplete(node, totalElapsedTime)
         : (timingData.timeElapsed += timePeriodLength);
     }
 
     if (node.type !== BaseNode.TYPES.NETWORK) throw new Error('Unsupported');
+    if (!('bytesDownloaded' in timingData)) throw new Error('Invalid timing data');
 
     const record = node.record;
     const connection = this._connectionPool.acquireActiveConnectionFromRecord(record);
@@ -385,7 +381,8 @@ class Simulator {
   _computeFinalNodeTimings() {
     /** @type {Array<[Node, LH.Gatherer.Simulation.NodeTiming]>} */
     const nodeTimingEntries = [];
-    for (const [node, timing] of this._nodeTimings) {
+    for (const node of this._nodeTimings.getNodes()) {
+      const timing = this._nodeTimings.getCompleted(node);
       nodeTimingEntries.push([node, {
         startTime: timing.startTime,
         endTime: timing.endTime,
@@ -449,7 +446,7 @@ class Simulator {
     // loop as long as we have nodes in the queue or currently in progress
     while (nodesReadyToStart.size || nodesInProgress.size) {
       // move all possible queued nodes to in progress
-      for (const node of this._getNodesSortedByStartTime()) {
+      for (const node of this._getNodesSortedByStartPosition()) {
         this._startNodeIfPossible(node, totalElapsedTime);
       }
 
@@ -470,7 +467,7 @@ class Simulator {
 
       // While this is no longer strictly necessary, it's always better than LH hanging
       if (!Number.isFinite(minimumTime) || iteration > 100000) {
-        throw new Error('Graph creation failed, depth exceeded');
+        throw new Error('Simulation failed, depth exceeded');
       }
 
       iteration++;
@@ -493,17 +490,17 @@ class Simulator {
   static get ALL_NODE_TIMINGS() {
     return ALL_SIMULATION_NODE_TIMINGS;
   }
+
+  /**
+   * We attempt to start nodes by their observed start time using the record priority as a tie breaker.
+   * When simulating, just because a low priority image started 5ms before a high priority image doesn't mean
+   * it would have happened like that when the network was slower.
+   * @param {Node} node
+   */
+  static _computeNodeStartPosition(node) {
+    if (node.type === 'cpu') return node.startTime;
+    return node.startTime + (PriorityStartTimePenalty[node.record.priority] * 1000 * 1000 || 0);
+  }
 }
 
 module.exports = Simulator;
-
-/**
- * @typedef NodeTimingIntermediate
- * @property {number} [startTime]
- * @property {number} [endTime]
- * @property {number} [queuedTime] Helpful for debugging.
- * @property {number} [estimatedTimeElapsed]
- * @property {number} [timeElapsed]
- * @property {number} [timeElapsedOvershoot]
- * @property {number} [bytesDownloaded]
- */

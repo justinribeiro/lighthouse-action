@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -15,7 +15,7 @@ const DEFAULT_SERVER_RESPONSE_PERCENTAGE = 0.4;
 /**
  * For certain resource types, server response time takes up a greater percentage of TTFB (dynamic
  * assets like HTML documents, XHR/API calls, etc)
- * @type {Partial<Record<LH.Crdp.Page.ResourceType, number>>}
+ * @type {Partial<Record<LH.Crdp.Network.ResourceType, number>>}
  */
 const SERVER_RESPONSE_PERCENTAGE_OF_TTFB = {
   Document: 0.9,
@@ -268,7 +268,6 @@ class NetworkAnalyzer {
 
     // Check if we can trust the connection information coming from the protocol
     if (!forceCoarseEstimates && NetworkAnalyzer.canTrustConnectionInformation(records)) {
-      // @ts-ignore
       return new Map(records.map(record => [record.requestId, !!record.connectionReused]));
     }
 
@@ -438,6 +437,17 @@ class NetworkAnalyzer {
    * @return {LH.Artifacts.NetworkRequest}
    */
   static findMainDocument(records, finalURL) {
+    const mainDocument = NetworkAnalyzer.findOptionalMainDocument(records, finalURL);
+    if (!mainDocument) throw new Error('Unable to identify the main resource');
+    return mainDocument;
+  }
+
+  /**
+   * @param {Array<LH.Artifacts.NetworkRequest>} records
+   * @param {string} [finalURL]
+   * @return {LH.Artifacts.NetworkRequest|undefined}
+   */
+  static findOptionalMainDocument(records, finalURL) {
     // Try to find an exact match with the final URL first if we have one
     if (finalURL) {
       // equalWithExcludedFragments is expensive, so check that the finalUrl starts with the request first
@@ -449,9 +459,21 @@ class NetworkAnalyzer {
 
     const documentRequests = records.filter(record => record.resourceType ===
         NetworkRequest.TYPES.Document);
-    if (!documentRequests.length) throw new Error('Unable to identify the main resource');
+    if (!documentRequests.length) return undefined;
     // The main document is the earliest document request, using position in networkRecords array to break ties.
     return documentRequests.reduce((min, r) => (r.startTime < min.startTime ? r : min));
+  }
+
+  /**
+   * Resolves redirect chain given a main document.
+   * See: {@link NetworkAnalyzer.findMainDocument}) for how to retrieve main document.
+   *
+   * @param {LH.Artifacts.NetworkRequest} request
+   * @return {LH.Artifacts.NetworkRequest}
+   */
+  static resolveRedirects(request) {
+    while (request.redirectDestination) request = request.redirectDestination;
+    return request;
   }
 }
 

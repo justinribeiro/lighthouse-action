@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -13,7 +13,6 @@
 'use strict';
 
 const Audit = require('../audit.js');
-const Util = require('../../report/html/renderer/util.js');
 const i18n = require('../../lib/i18n/i18n.js');
 
 const UIStrings = {
@@ -24,11 +23,9 @@ const UIStrings = {
   /** Description of a Lighthouse audit that tells the user *why* they should reduce the size of the web page's DOM. The size of a DOM is characterized by the total number of DOM elements and greatest DOM depth. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation. */
   description: 'A large DOM will increase memory usage, cause longer ' +
     '[style calculations](https://developers.google.com/web/fundamentals/performance/rendering/reduce-the-scope-and-complexity-of-style-calculations), ' +
-    'and produce costly [layout reflows](https://developers.google.com/speed/articles/reflow). [Learn more](https://web.dev/dom-size).',
+    'and produce costly [layout reflows](https://developers.google.com/speed/articles/reflow). [Learn more](https://web.dev/dom-size/).',
   /** Table column header for the type of statistic. These statistics describe how big the DOM is (count of DOM elements, children, depth). */
   columnStatistic: 'Statistic',
-  /** Table column header for the DOM element. Each DOM element is described with its HTML representation. */
-  columnElement: 'Element',
   /** Table column header for the observed value of the DOM statistic. */
   columnValue: 'Value',
   /** [ICU Syntax] Label for an audit identifying the number of DOM elements found in the page. */
@@ -45,7 +42,6 @@ const UIStrings = {
 };
 
 const str_ = i18n.createMessageInstanceIdFn(__filename, UIStrings);
-
 
 class DOMSize extends Audit {
   /**
@@ -67,11 +63,10 @@ class DOMSize extends Audit {
    */
   static get defaultOptions() {
     return {
-      // 25th and 50th percentiles HTTPArchive -> 50 and 75
       // https://bigquery.cloud.google.com/table/httparchive:lighthouse.2018_04_01_mobile?pli=1
-      // see https://www.desmos.com/calculator/vqot3wci4g
-      scorePODR: 700,
-      scoreMedian: 1400,
+      // see https://www.desmos.com/calculator/tsunbwqt3f
+      p10: 818,
+      median: 1400,
     };
   }
 
@@ -85,15 +80,14 @@ class DOMSize extends Audit {
     const stats = artifacts.DOMStats;
 
     const score = Audit.computeLogNormalScore(
-      stats.totalBodyElements,
-      context.options.scorePODR,
-      context.options.scoreMedian
+      {p10: context.options.p10, median: context.options.median},
+      stats.totalBodyElements
     );
 
     /** @type {LH.Audit.Details.Table['headings']} */
     const headings = [
       {key: 'statistic', itemType: 'text', text: str_(UIStrings.columnStatistic)},
-      {key: 'element', itemType: 'code', text: str_(UIStrings.columnElement)},
+      {key: 'node', itemType: 'node', text: str_(i18n.UIStrings.columnElement)},
       {key: 'value', itemType: 'numeric', text: str_(UIStrings.columnValue)},
     ];
 
@@ -101,34 +95,25 @@ class DOMSize extends Audit {
     const items = [
       {
         statistic: str_(UIStrings.statisticDOMElements),
-        element: '',
-        value: Util.formatNumber(stats.totalBodyElements),
+        value: stats.totalBodyElements,
       },
       {
+        node: Audit.makeNodeItem(stats.depth),
         statistic: str_(UIStrings.statisticDOMDepth),
-        element: {
-          type: 'code',
-          value: stats.depth.snippet,
-        },
-        value: Util.formatNumber(stats.depth.max),
+        value: stats.depth.max,
       },
       {
+        node: Audit.makeNodeItem(stats.width),
         statistic: str_(UIStrings.statisticDOMWidth),
-        element: {
-          type: 'code',
-          value: stats.width.snippet,
-        },
-        value: Util.formatNumber(stats.width.max),
+        value: stats.width.max,
       },
     ];
 
     return {
       score,
       numericValue: stats.totalBodyElements,
+      numericUnit: 'element',
       displayValue: str_(UIStrings.displayValue, {itemCount: stats.totalBodyElements}),
-      extendedInfo: {
-        value: items,
-      },
       details: Audit.makeTableDetails(headings, items),
     };
   }

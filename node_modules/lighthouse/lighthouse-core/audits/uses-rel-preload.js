@@ -1,11 +1,12 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
 'use strict';
 
 const URL = require('../lib/url-shim.js');
+const NetworkRequest = require('../lib/network-request.js');
 const Audit = require('./audit.js');
 const UnusedBytes = require('./byte-efficiency/byte-efficiency-audit.js');
 const CriticalRequestChains = require('../computed/critical-request-chains.js');
@@ -19,12 +20,12 @@ const UIStrings = {
   title: 'Preload key requests',
   /** Description of a Lighthouse audit that tells the user *why* they should preload important network requests. The associated network requests are started halfway through pageload (or later) but should be started at the beginning. This is displayed after a user expands the section to see more. No character length limits. '<link rel=preload>' is the html code the user would include in their page and shouldn't be translated. 'Learn More' becomes link text to additional documentation. */
   description: 'Consider using `<link rel=preload>` to prioritize fetching resources that are ' +
-    'currently requested later in page load. [Learn more](https://web.dev/uses-rel-preload).',
+    'currently requested later in page load. [Learn more](https://web.dev/uses-rel-preload/).',
   /**
    * @description A warning message that is shown when the user tried to follow the advice of the audit, but it's not working as expected. Forgetting to set the `crossorigin` HTML attribute, or setting it to an incorrect value, on the link is a common mistake when adding preload links.
    * @example {https://example.com} preloadURL
    * */
-  crossoriginWarning: 'A preload <link> was found for "{preloadURL}" but was not used ' +
+  crossoriginWarning: 'A preload `<link>` was found for "{preloadURL}" but was not used ' +
     'by the browser. Check that you are using the `crossorigin` attribute properly.',
 };
 
@@ -41,6 +42,7 @@ class UsesRelPreloadAudit extends Audit {
       id: 'uses-rel-preload',
       title: str_(UIStrings.title),
       description: str_(UIStrings.description),
+      supportedModes: ['navigation'],
       requiredArtifacts: ['devtoolsLogs', 'traces', 'URL'],
       scoreDisplayMode: Audit.SCORING_MODES.NUMERIC,
     };
@@ -78,11 +80,26 @@ class UsesRelPreloadAudit extends Audit {
     graph.traverse(node => node.type === 'network' && requests.push(node.record));
 
     const preloadRequests = requests.filter(req => req.isLinkPreload);
-    const preloadURLs = new Set(preloadRequests.map(req => req.url));
-    // A failed preload attempt will manifest as a URL that was requested twice.
-    // Once with `isLinkPreload` AND again without `isLinkPreload`.
-    const failedRequests = requests.filter(req => preloadURLs.has(req.url) && !req.isLinkPreload);
-    return new Set(failedRequests.map(req => req.url));
+    const preloadURLsByFrame = new Map();
+    for (const request of preloadRequests) {
+      const preloadURLs = preloadURLsByFrame.get(request.frameId) || new Set();
+      preloadURLs.add(request.url);
+      preloadURLsByFrame.set(request.frameId, preloadURLs);
+    }
+
+    // A failed preload attempt will manifest as a URL that was requested twice within the same frame.
+    // Once with `isLinkPreload` AND again without `isLinkPreload` but not hitting the cache.
+    const duplicateRequestsAfterPreload = requests.filter(request => {
+      const preloadURLsForFrame = preloadURLsByFrame.get(request.frameId);
+      if (!preloadURLsForFrame) return false;
+      if (!preloadURLsForFrame.has(request.url)) return false;
+      const fromCache = request.fromDiskCache ||
+        request.fromMemoryCache ||
+        request.fromPrefetchCache;
+      return !fromCache && !request.isLinkPreload;
+    });
+
+    return new Set(duplicateRequestsAfterPreload.map(req => req.url));
   }
 
   /**
@@ -105,9 +122,11 @@ class UsesRelPreloadAudit extends Audit {
     // It's not critical, don't recommend it.
     if (!CriticalRequestChains.isCritical(request, mainResource)) return false;
     // It's not a request loaded over the network, don't recommend it.
-    if (URL.NON_NETWORK_PROTOCOLS.includes(request.protocol)) return false;
+    if (NetworkRequest.isNonNetworkRequest(request)) return false;
     // It's not at the right depth, don't recommend it.
     if (initiatorPath.length !== mainResourceDepth + 2) return false;
+    // It's not a request for the main frame, it wouldn't get reused even if you did preload it.
+    if (request.frameId !== mainResource.frameId) return false;
     // We survived everything else, just check that it's a first party request.
     return URL.rootDomainsMatch(request.url, mainResource.url);
   }
@@ -136,11 +155,10 @@ class UsesRelPreloadAudit extends Audit {
     modifiedGraph.traverse(node => {
       if (node.type !== 'network') return;
 
-      const networkNode = /** @type {LH.Gatherer.Simulation.GraphNetworkNode} */ (node);
       if (node.isMainDocument()) {
-        mainDocumentNode = networkNode;
-      } else if (networkNode.record && urls.has(networkNode.record.url)) {
-        nodesToPreload.push(networkNode);
+        mainDocumentNode = node;
+      } else if (node.record && urls.has(node.record.url)) {
+        nodesToPreload.push(node);
       }
     });
 
@@ -159,7 +177,7 @@ class UsesRelPreloadAudit extends Audit {
     // Once we've modified the dependencies, simulate the new graph with flexible ordering.
     const simulationAfterChanges = simulator.simulate(modifiedGraph, {flexibleOrdering: true});
     const originalNodesByRecord = Array.from(simulationBeforeChanges.nodeTimings.keys())
-        // @ts-ignore we don't care if all nodes without a record collect on `undefined`
+        // @ts-expect-error we don't care if all nodes without a record collect on `undefined`
         .reduce((map, node) => map.set(node.record, node), new Map());
 
     const results = [];
@@ -191,11 +209,11 @@ class UsesRelPreloadAudit extends Audit {
    * @param {LH.Audit.Context} context
    * @return {Promise<LH.Audit.Product>}
    */
-  static async audit(artifacts, context) {
+  static async audit_(artifacts, context) {
     const trace = artifacts.traces[UsesRelPreloadAudit.DEFAULT_PASS];
     const devtoolsLog = artifacts.devtoolsLogs[UsesRelPreloadAudit.DEFAULT_PASS];
     const URL = artifacts.URL;
-    const simulatorOptions = {trace, devtoolsLog, settings: context.settings};
+    const simulatorOptions = {devtoolsLog, settings: context.settings};
 
     const [mainResource, graph, simulator] = await Promise.all([
       MainResource.request({devtoolsLog, URL}, context),
@@ -208,7 +226,7 @@ class UsesRelPreloadAudit extends Audit {
     // sort results by wastedTime DESC
     results.sort((a, b) => b.wastedMs - a.wastedMs);
 
-    /** @type {Array<string>|undefined} */
+    /** @type {Array<LH.IcuMessage>|undefined} */
     let warnings;
     const failedURLs = UsesRelPreloadAudit.getURLsFailedToPreload(graph);
     if (failedURLs.size) {
@@ -226,15 +244,23 @@ class UsesRelPreloadAudit extends Audit {
     return {
       score: UnusedBytes.scoreForWastedMs(wastedMs),
       numericValue: wastedMs,
+      numericUnit: 'millisecond',
       displayValue: wastedMs ?
         str_(i18n.UIStrings.displayValueMsSavings, {wastedMs}) :
         '',
-      extendedInfo: {
-        value: results,
-      },
       details,
       warnings,
     };
+  }
+
+  /**
+   * @return {Promise<LH.Audit.Product>}
+   */
+  static async audit() {
+    // Preload advice is dangerous until https://bugs.chromium.org/p/chromium/issues/detail?id=788757
+    // has been fixed and validated. All preload audits are on hold until then.
+    // See https://github.com/GoogleChrome/lighthouse/issues/11960 for more discussion.
+    return {score: 1, notApplicable: true, details: Audit.makeOpportunityDetails([], [], 0)};
   }
 }
 

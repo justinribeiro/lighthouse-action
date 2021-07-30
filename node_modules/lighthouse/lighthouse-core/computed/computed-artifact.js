@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -11,7 +11,7 @@ const log = require('lighthouse-logger');
 /**
  * Decorate computableArtifact with a caching `request()` method which will
  * automatically call `computableArtifact.compute_()` under the hood.
- * @template {{name: string, compute_(artifacts: unknown, context: LH.Audit.Context): Promise<unknown>}} C
+ * @template {{name: string, compute_(artifacts: unknown, context: LH.Artifacts.ComputedContext): Promise<unknown>}} C
  * @param {C} computableArtifact
  */
 function makeComputedArtifact(computableArtifact) {
@@ -21,11 +21,12 @@ function makeComputedArtifact(computableArtifact) {
   /**
    * Return an automatically cached result from the computed artifact.
    * @param {FirstParamType<C['compute_']>} artifacts
-   * @param {LH.Audit.Context} context
+   * @param {LH.Artifacts.ComputedContext} context
    * @return {ReturnType<C['compute_']>}
    */
   const request = (artifacts, context) => {
-    const computedCache = context.computedCache;
+    // NOTE: break immutability solely for this caching-controller function.
+    const computedCache = /** @type {Map<string, ArbitraryEqualityMap>} */ (context.computedCache);
     const computedName = computableArtifact.name;
 
     const cache = computedCache.get(computedName) || new ArbitraryEqualityMap();
