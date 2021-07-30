@@ -11,6 +11,8 @@ inputs:
     description: 'File path to custom budget.json file; will fail PRs based on budget result. See https://developers.google.com/web/tools/lighthouse/audits/budgets'
   secret:
     description: 'This should be the default secrets.GITHUB_TOKEN so that we can send comments to your PRs.'
+  lighthouseScoringBudget:
+    description: 'File path to custom scores.js file; will fail PRs based on scoring result. See the above section in this README "Using scores.js to increase your audit power" for more information.'
 outputs:
   resultsPath:
     description: 'Path to the folder with Lighthouse audit results'
