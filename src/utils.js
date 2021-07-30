@@ -50,11 +50,13 @@ function parseLighthouseResultsToString(core, lhr, speed) {
 
   [
     'first-contentful-paint',
+    'interactive',
     'first-meaningful-paint',
     'max-potential-fid',
-    'interactive',
-    'first-cpu-idle',
+    'total-blocking-time',
     'speed-index',
+    'largest-contentful-paint',
+    'cumulative-layout-shift',
   ].forEach(cat => {
     if (lhr.audits[cat]) {
       timings += `| ${lhr.audits[cat].title} | ${lhr.audits[cat].displayValue} | \n`;
