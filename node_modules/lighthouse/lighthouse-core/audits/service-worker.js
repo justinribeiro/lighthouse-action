@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2016 Google Inc. All Rights Reserved.
+ * @license Copyright 2016 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -17,7 +17,7 @@ const UIStrings = {
   /** Description of a Lighthouse audit that tells the user why they should use a service worker. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation. */
   description: 'The service worker is the technology that enables your app to use many ' +
     'Progressive Web App features, such as offline, add to homescreen, and push ' +
-    'notifications. [Learn more](https://web.dev/service-worker).',
+    'notifications. [Learn more](https://web.dev/service-worker/).',
   /**
    * @description Message explaining that the website may have service workers, but none are in scope to control the tested web page.
    * @example {https://example.com/} pageUrl
@@ -73,41 +73,51 @@ class ServiceWorker extends Audit {
    * @param {Array<LH.Crdp.ServiceWorker.ServiceWorkerVersion>} matchingSWVersions
    * @param {Array<LH.Crdp.ServiceWorker.ServiceWorkerRegistration>} registrations
    * @param {URL} pageUrl
-   * @return {string|undefined}
+   * @return {{scopeUrl: string; scriptUrl: string} | undefined}
    */
-  static getControllingScopeUrl(matchingSWVersions, registrations, pageUrl) {
+  static getControllingServiceWorker(matchingSWVersions, registrations, pageUrl) {
     // Find the normalized scope URLs of possibly-controlling SWs.
-    const matchingScopeUrls = matchingSWVersions
-      .map(v => registrations.find(r => r.registrationId === v.registrationId))
-      .filter(/** @return {r is LH.Crdp.ServiceWorker.ServiceWorkerRegistration} */ r => !!r)
-      .map(r => new URL(r.scopeURL).href);
+    /** @type {Array<{scopeUrl: string; scriptUrl: string}>} */
+    const scriptByScopeUrlList = [];
+
+    // Populate serviceWorkerUrls map with the scriptURLs and scopeUrls of matchingSWVersions and registrations
+    for (const version of matchingSWVersions) {
+      const matchedRegistration = registrations
+        .find(r => r.registrationId === version.registrationId);
+
+      if (matchedRegistration) {
+        const scopeUrl = new URL(matchedRegistration.scopeURL).href;
+        const scriptUrl = new URL(version.scriptURL).href;
+        scriptByScopeUrlList.push({scopeUrl, scriptUrl});
+      }
+    }
 
     // Find most-specific applicable scope, the one controlling the page.
     // See https://w3c.github.io/ServiceWorker/v1/#scope-match-algorithm
-    const pageControllingScope = matchingScopeUrls
-      .filter(scopeUrl => pageUrl.href.startsWith(scopeUrl))
-      .sort((scopeA, scopeB) => scopeA.length - scopeB.length)
+    const pageControllingUrls = scriptByScopeUrlList
+      .filter(ss => pageUrl.href.startsWith(ss.scopeUrl))
+      .sort((ssA, ssB) => ssA.scopeUrl.length - ssB.scopeUrl.length)
       .pop();
 
-    return pageControllingScope;
+    return pageControllingUrls;
   }
 
   /**
    * Returns a failure message if there is no start_url or if the start_url isn't
    * contolled by the scopeUrl.
-   * @param {LH.Artifacts['WebAppManifest']} manifest
+   * @param {LH.Artifacts['WebAppManifest']} WebAppManifest
    * @param {string} scopeUrl
-   * @return {string|undefined}
+   * @return {LH.IcuMessage|undefined}
    */
-  static checkStartUrl(manifest, scopeUrl) {
-    if (!manifest) {
+  static checkStartUrl(WebAppManifest, scopeUrl) {
+    if (!WebAppManifest) {
       return str_(UIStrings.explanationNoManifest);
     }
-    if (!manifest.value) {
+    if (!WebAppManifest.value) {
       return str_(UIStrings.explanationBadManifest);
     }
 
-    const startUrl = manifest.value.start_url.value;
+    const startUrl = WebAppManifest.value.start_url.value;
     if (!startUrl.startsWith(scopeUrl)) {
       return str_(UIStrings.explanationBadStartUrl, {startUrl, scopeUrl});
     }
@@ -129,20 +139,30 @@ class ServiceWorker extends Audit {
       };
     }
 
-    const controllingScopeUrl = ServiceWorker.getControllingScopeUrl(versionsForOrigin,
+    const serviceWorkerUrls = ServiceWorker.getControllingServiceWorker(versionsForOrigin,
         registrations, pageUrl);
-    if (!controllingScopeUrl) {
+    if (!serviceWorkerUrls) {
       return {
         score: 0,
         explanation: str_(UIStrings.explanationOutOfScope, {pageUrl: pageUrl.href}),
       };
     }
 
+    // Include the SW details as diagnostic data.
+    const {scriptUrl, scopeUrl} = serviceWorkerUrls;
+    /** @type {LH.Audit.Details.DebugData} */
+    const details = {
+      type: 'debugdata',
+      scriptUrl,
+      scopeUrl,
+    };
+
     const startUrlFailure = ServiceWorker.checkStartUrl(artifacts.WebAppManifest,
-        controllingScopeUrl);
+      serviceWorkerUrls.scopeUrl);
     if (startUrlFailure) {
       return {
         score: 0,
+        details,
         explanation: startUrlFailure,
       };
     }
@@ -150,6 +170,7 @@ class ServiceWorker extends Audit {
     // SW controls both finalUrl and start_url.
     return {
       score: 1,
+      details,
     };
   }
 }

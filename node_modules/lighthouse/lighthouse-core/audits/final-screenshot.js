@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -7,7 +7,7 @@
 
 const Audit = require('./audit.js');
 const LHError = require('../lib/lh-error.js');
-const TraceOfTab = require('../computed/trace-of-tab.js');
+const ProcessedTrace = require('../computed/processed-trace.js');
 const Screenshots = require('../computed/screenshots.js');
 
 class FinalScreenshot extends Audit {
@@ -20,7 +20,7 @@ class FinalScreenshot extends Audit {
       scoreDisplayMode: Audit.SCORING_MODES.INFORMATIVE,
       title: 'Final Screenshot',
       description: 'The last screenshot captured of the pageload.',
-      requiredArtifacts: ['traces'],
+      requiredArtifacts: ['traces', 'GatherContext'],
     };
   }
 
@@ -31,12 +31,16 @@ class FinalScreenshot extends Audit {
    */
   static async audit(artifacts, context) {
     const trace = artifacts.traces[Audit.DEFAULT_PASS];
-    const traceOfTab = await TraceOfTab.request(trace, context);
+    const processedTrace = await ProcessedTrace.request(trace, context);
     const screenshots = await Screenshots.request(trace, context);
-    const {navigationStart} = traceOfTab.timestamps;
+    const {timeOrigin} = processedTrace.timestamps;
     const finalScreenshot = screenshots[screenshots.length - 1];
 
     if (!finalScreenshot) {
+      // If a timespan didn't happen to contain frames, that's fine. Just mark not applicable.
+      if (artifacts.GatherContext.gatherMode === 'timespan') return {notApplicable: true, score: 1};
+
+      // If it was another mode, that's a fatal error.
       throw new LHError(LHError.errors.NO_SCREENSHOTS);
     }
 
@@ -44,7 +48,7 @@ class FinalScreenshot extends Audit {
       score: 1,
       details: {
         type: 'screenshot',
-        timing: Math.round((finalScreenshot.timestamp - navigationStart) / 1000),
+        timing: Math.round((finalScreenshot.timestamp - timeOrigin) / 1000),
         timestamp: finalScreenshot.timestamp,
         data: finalScreenshot.datauri,
       },

@@ -1,0 +1,22 @@
+{
+  "name": "Lighthouse",
+  "version": "100.0.0.2",
+  "minimum_chrome_version": "72",
+  "manifest_version": 2,
+  "description": "Lighthouse is an open-source, automated tool for improving the performance, quality, and correctness of your web apps.",
+  "icons": {
+    "16": "images/lh_favicon_16x16.png",
+    "128": "images/lh_logo_128x128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "browser_action": {
+    "default_icon": {
+      "32": "images/lh_favicon_32x32.png"
+    },
+    "default_title": "Lighthouse",
+    "default_popup": "popup.html"
+  }
+}

@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -10,11 +10,9 @@ const ComputedFid = require('../../computed/metrics/max-potential-fid.js');
 const i18n = require('../../lib/i18n/i18n.js');
 
 const UIStrings = {
-  /** The name of the metric "Maximum Potential First Input Delay" that marks the maximum estimated time between the page receiving input (a user clicking, tapping, or typing) and the page responding. Shown to users as the label for the numeric metric value. Ideally fits within a ~40 character limit. */
-  title: 'Max Potential First Input Delay',
   /** Description of the Maximum Potential First Input Delay metric that marks the maximum estimated time between the page receiving input (a user clicking, tapping, or typing) and the page responding. This description is displayed within a tooltip when the user hovers on the metric name to see more. No character length limits. 'Learn More' becomes link text to additional documentation. */
   description: 'The maximum potential First Input Delay that your users could experience is the ' +
-      'duration, in milliseconds, of the longest task. [Learn more](https://developers.google.com/web/updates/2018/05/first-input-delay).',
+      'duration of the longest task. [Learn more](https://web.dev/lighthouse-max-potential-fid/).',
 };
 
 const str_ = i18n.createMessageInstanceIdFn(__filename, UIStrings);
@@ -31,10 +29,11 @@ class MaxPotentialFID extends Audit {
   static get meta() {
     return {
       id: 'max-potential-fid',
-      title: str_(UIStrings.title),
+      title: str_(i18n.UIStrings.maxPotentialFIDMetric),
       description: str_(UIStrings.description),
       scoreDisplayMode: Audit.SCORING_MODES.NUMERIC,
-      requiredArtifacts: ['traces', 'devtoolsLogs'],
+      supportedModes: ['navigation'],
+      requiredArtifacts: ['traces', 'devtoolsLogs', 'GatherContext'],
     };
   }
 
@@ -43,9 +42,9 @@ class MaxPotentialFID extends Audit {
    */
   static get defaultOptions() {
     return {
-      // see https://www.desmos.com/calculator/g3nf1ehtnk
-      scorePODR: 100,
-      scoreMedian: 250,
+      // see https://www.desmos.com/calculator/onxmbblyqo
+      p10: 130,
+      median: 250,
     };
   }
 
@@ -57,16 +56,17 @@ class MaxPotentialFID extends Audit {
   static async audit(artifacts, context) {
     const trace = artifacts.traces[Audit.DEFAULT_PASS];
     const devtoolsLog = artifacts.devtoolsLogs[Audit.DEFAULT_PASS];
-    const metricComputationData = {trace, devtoolsLog, settings: context.settings};
+    const gatherContext = artifacts.GatherContext;
+    const metricComputationData = {trace, devtoolsLog, gatherContext, settings: context.settings};
     const metricResult = await ComputedFid.request(metricComputationData, context);
 
     return {
       score: Audit.computeLogNormalScore(
-        metricResult.timing,
-        context.options.scorePODR,
-        context.options.scoreMedian
+        {p10: context.options.p10, median: context.options.median},
+        metricResult.timing
       ),
       numericValue: metricResult.timing,
+      numericUnit: 'millisecond',
       displayValue: str_(i18n.UIStrings.ms, {timeInMs: metricResult.timing}),
     };
   }

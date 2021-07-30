@@ -1,17 +1,16 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
 'use strict';
 
 const log = require('lighthouse-logger');
-
-/** @typedef {import('../../audits/metrics.js').UberMetricsItem} UberMetricsItem */
+const TraceProcessor = require('../tracehouse/trace-processor.js');
 
 /**
  * @param {LH.Audit.Results} auditResults
- * @return {UberMetricsItem|undefined}
+ * @return {LH.Artifacts.TimingSummary|undefined}
  */
 function getUberMetrics(auditResults) {
   const metricsAudit = auditResults.metrics;
@@ -32,14 +31,14 @@ class Metrics {
 
   /**
    * Returns simplified representation of all metrics
-   * @return {Array<{id: string, name: string, tsKey: keyof UberMetricsItem}>} metrics to consider
+   * @return {Array<{id: string, name: string, tsKey: keyof LH.Artifacts.TimingSummary}>} metrics to consider
    */
   static get metricsDefinitions() {
     return [
       {
-        name: 'Navigation Start',
-        id: 'navstart',
-        tsKey: 'observedNavigationStartTs',
+        name: 'Time Origin',
+        id: 'timeorigin',
+        tsKey: 'observedTimeOriginTs',
       },
       {
         name: 'First Contentful Paint',
@@ -65,11 +64,6 @@ class Metrics {
         name: 'Visually Complete 100%',
         id: 'vc100',
         tsKey: 'observedLastVisualChangeTs',
-      },
-      {
-        name: 'First CPU Idle',
-        id: 'ttfi',
-        tsKey: 'firstCPUIdleTs',
       },
       {
         name: 'Interactive',
@@ -125,16 +119,19 @@ class Metrics {
   }
 
   /**
-   * Get the full trace event for our navigationStart
+   * Get the trace event data for our timeOrigin
    * @param {Array<{ts: number, id: string, name: string}>} metrics
-   * @return {LH.TraceEvent|undefined}
+   * @return {{pid: number, tid: number, ts: number} | {errorMessage: string}}
    */
-  getNavigationStartEvt(metrics) {
-    const navStartMetric = metrics.find(e => e.id === 'navstart');
-    if (!navStartMetric) return;
-    return this._traceEvents.find(
-      e => e.name === 'navigationStart' && e.ts === navStartMetric.ts
-    );
+  getTimeOriginEvt(metrics) {
+    const timeOriginMetric = metrics.find(e => e.id === 'timeorigin');
+    if (!timeOriginMetric) return {errorMessage: 'timeorigin Metric not found in definitions'};
+    try {
+      const frameIds = TraceProcessor.findMainFrameIds(this._traceEvents);
+      return {pid: frameIds.pid, tid: frameIds.tid, ts: timeOriginMetric.ts};
+    } catch (err) {
+      return {errorMessage: err.message};
+    }
   }
 
   /**
@@ -142,14 +139,14 @@ class Metrics {
    *     { "pid": 89922,"tid":1295,"ts":77176783452,"ph":"b","cat":"blink.user_timing","name":"innermeasure","args":{},"tts":1257886,"id":"0xe66c67"}
    *     { "pid": 89922,"tid":1295,"ts":77176882592,"ph":"e","cat":"blink.user_timing","name":"innermeasure","args":{},"tts":1257898,"id":"0xe66c67"}
    * @param {{ts: number, id: string, name: string}} metric
-   * @param {LH.TraceEvent} navigationStartEvt
+   * @param {{pid: number, tid: number, ts: number}} timeOriginEvt
    * @return {Array<LH.TraceEvent>} Pair of trace events (start/end)
    */
-  synthesizeEventPair(metric, navigationStartEvt) {
-    // We'll masquerade our fake events to look mostly like navigationStart
+  synthesizeEventPair(metric, timeOriginEvt) {
+    // We'll masquerade our fake events to look mostly like the timeOrigin event
     const eventBase = {
-      pid: navigationStartEvt.pid,
-      tid: navigationStartEvt.tid,
+      pid: timeOriginEvt.pid,
+      tid: timeOriginEvt.tid,
       cat: 'blink.user_timing',
       name: metric.name,
       args: {},
@@ -157,7 +154,7 @@ class Metrics {
       id: `0x${((Math.random() * 1000000) | 0).toString(16)}`,
     };
     const fakeMeasureStartEvent = Object.assign({}, eventBase, {
-      ts: navigationStartEvt.ts,
+      ts: timeOriginEvt.ts,
       ph: 'b',
     });
     const fakeMeasureEndEvent = Object.assign({}, eventBase, {
@@ -177,16 +174,16 @@ class Metrics {
       return [];
     }
 
-    const navigationStartEvt = this.getNavigationStartEvt(metrics);
-    if (!navigationStartEvt) {
-      log.error('pwmetrics-events', 'Reference navigationStart not found');
+    const timeOriginEvt = this.getTimeOriginEvt(metrics);
+    if ('errorMessage' in timeOriginEvt) {
+      log.error('pwmetrics-events', `Reference timeOrigin error: ${timeOriginEvt.errorMessage}`);
       return [];
     }
 
     /** @type {Array<LH.TraceEvent>} */
     const fakeEvents = [];
     metrics.forEach(metric => {
-      if (metric.id === 'navstart') {
+      if (metric.id === 'timeorigin') {
         return;
       }
       if (!metric.ts) {
@@ -194,7 +191,7 @@ class Metrics {
         return;
       }
       log.verbose('pwmetrics-events', `Sythesizing trace events for ${metric.name}`);
-      fakeEvents.push(...this.synthesizeEventPair(metric, navigationStartEvt));
+      fakeEvents.push(...this.synthesizeEventPair(metric, timeOriginEvt));
     });
     return fakeEvents;
   }

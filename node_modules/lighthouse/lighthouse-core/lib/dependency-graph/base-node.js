@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -86,6 +86,13 @@ class BaseNode {
   }
 
   /**
+   * @return {number}
+   */
+  getNumberOfDependents() {
+    return this._dependents.length;
+  }
+
+  /**
    * @return {Node[]}
    */
   getDependencies() {
@@ -122,6 +129,9 @@ class BaseNode {
    * @param {Node} node
    */
   addDependency(node) {
+    // @ts-expect-error - in checkJs, ts doesn't know that CPUNode and NetworkNode *are* BaseNodes.
+    if (node === this) throw new Error('Cannot add dependency on itself');
+
     if (this._dependencies.includes(node)) {
       return;
     }
@@ -154,6 +164,28 @@ class BaseNode {
     for (const node of this._dependencies.slice()) {
       this.removeDependency(node);
     }
+  }
+
+  /**
+   * Computes whether the given node is anywhere in the dependency graph of this node.
+   * While this method can prevent cycles, it walks the graph and should be used sparingly.
+   * Nodes are always considered dependent on themselves for the purposes of cycle detection.
+   * @param {BaseNode} node
+   * @return {boolean}
+   */
+  isDependentOn(node) {
+    let isDependentOnNode = false;
+    this.traverse(currentNode => {
+      if (isDependentOnNode) return;
+      isDependentOnNode = currentNode === node;
+    }, currentNode => {
+      // If we've already found the dependency, don't traverse further.
+      if (isDependentOnNode) return [];
+      // Otherwise, traverse the dependencies.
+      return currentNode.getDependencies();
+    });
+
+    return isDependentOnNode;
   }
 
   /**
@@ -227,21 +259,31 @@ class BaseNode {
    * @param {function(Node): Node[]} [getNextNodes]
    */
   traverse(callback, getNextNodes) {
+    for (const {node, traversalPath} of this.traverseGenerator(getNextNodes)) {
+      callback(node, traversalPath);
+    }
+  }
+
+  /**
+   * @see BaseNode.traverse
+   * @param {function(Node): Node[]} [getNextNodes]
+   */
+  * traverseGenerator(getNextNodes) {
     if (!getNextNodes) {
       getNextNodes = node => node.getDependents();
     }
 
     /** @type {Node[][]} */
-    // @ts-ignore - only traverses graphs of Node, so force tsc to treat `this` as one
+    // @ts-expect-error - only traverses graphs of Node, so force tsc to treat `this` as one
     const queue = [[this]];
     const visited = new Set([this.id]);
 
     while (queue.length) {
       /** @type {Node[]} */
-      // @ts-ignore - queue has length so it's guaranteed to have an item
+      // @ts-expect-error - queue has length so it's guaranteed to have an item
       const traversalPath = queue.shift();
       const node = traversalPath[0];
-      callback(node, traversalPath);
+      yield {node, traversalPath};
 
       for (const nextNode of getNextNodes(node)) {
         if (visited.has(nextNode.id)) continue;
@@ -274,7 +316,7 @@ class BaseNode {
     while (toVisit.length) {
       // Get the last node in the stack (DFS uses stack, not queue)
       /** @type {Node} */
-      // @ts-ignore - toVisit has length so it's guaranteed to have an item
+      // @ts-expect-error - toVisit has length so it's guaranteed to have an item
       const currentNode = toVisit.pop();
 
       // We've hit a cycle if the node we're visiting is in our current dependency path
@@ -283,7 +325,7 @@ class BaseNode {
       if (visited.has(currentNode)) continue;
 
       // Since we're visiting this node, clear out any nodes in our path that we had to backtrack
-      // @ts-ignore
+      // @ts-expect-error
       while (currentPath.length > depthAdded.get(currentNode)) currentPath.pop();
 
       // Update our data structures to reflect that we're adding this node to our path

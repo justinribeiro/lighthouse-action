@@ -1,15 +1,15 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
 'use strict';
 
 const makeComputedArtifact = require('../computed-artifact.js');
-const ComputedMetric = require('./metric.js');
+const NavigationMetric = require('./navigation-metric.js');
 const LanternInteractive = require('./lantern-interactive.js');
 
-const NetworkRecorder = require('../../lib/network-recorder.js');
+const NetworkMonitor = require('../../gather/driver/network-monitor.js');
 const TracingProcessor = require('../../lib/tracehouse/trace-processor.js');
 const LHError = require('../../lib/lh-error.js');
 
@@ -21,35 +21,35 @@ const ALLOWED_CONCURRENT_REQUESTS = 2;
  * resources and is mostly idle.
  * @see https://docs.google.com/document/d/1yE4YWsusi5wVXrnwhR61j-QyjK9tzENIzfxrCjA1NAk/edit#heading=h.yozfsuqcgpc4
  */
-class Interactive extends ComputedMetric {
+class Interactive extends NavigationMetric {
   /**
    * Finds all time periods where the number of inflight requests is less than or equal to the
    * number of allowed concurrent requests (2).
    * @param {Array<LH.Artifacts.NetworkRequest>} networkRecords
-   * @param {{timestamps: {traceEnd: number}}} traceOfTab
+   * @param {{timestamps: {traceEnd: number}}} processedNavigation
    * @return {Array<TimePeriod>}
    */
-  static _findNetworkQuietPeriods(networkRecords, traceOfTab) {
-    const traceEndTsInMs = traceOfTab.timestamps.traceEnd / 1000;
+  static _findNetworkQuietPeriods(networkRecords, processedNavigation) {
+    const traceEndTsInMs = processedNavigation.timestamps.traceEnd / 1000;
     // Ignore records that failed, never finished, or were POST/PUT/etc.
     const filteredNetworkRecords = networkRecords.filter(record => {
       return record.finished && record.requestMethod === 'GET' && !record.failed &&
           // Consider network records that had 4xx/5xx status code as "failed"
           record.statusCode < 400;
     });
-    return NetworkRecorder.findNetworkQuietPeriods(filteredNetworkRecords,
+    return NetworkMonitor.findNetworkQuietPeriods(filteredNetworkRecords,
       ALLOWED_CONCURRENT_REQUESTS, traceEndTsInMs);
   }
 
   /**
    * Finds all time periods where there are no long tasks.
    * @param {Array<TimePeriod>} longTasks
-   * @param {{timestamps: {navigationStart: number, traceEnd: number}}} traceOfTab
+   * @param {{timestamps: {timeOrigin: number, traceEnd: number}}} processedNavigation
    * @return {Array<TimePeriod>}
    */
-  static _findCPUQuietPeriods(longTasks, traceOfTab) {
-    const navStartTsInMs = traceOfTab.timestamps.navigationStart / 1000;
-    const traceEndTsInMs = traceOfTab.timestamps.traceEnd / 1000;
+  static _findCPUQuietPeriods(longTasks, processedNavigation) {
+    const timeOriginTsInMs = processedNavigation.timestamps.timeOrigin / 1000;
+    const traceEndTsInMs = processedNavigation.timestamps.traceEnd / 1000;
     if (longTasks.length === 0) {
       return [{start: 0, end: traceEndTsInMs}];
     }
@@ -60,19 +60,19 @@ class Interactive extends ComputedMetric {
       if (index === 0) {
         quietPeriods.push({
           start: 0,
-          end: task.start + navStartTsInMs,
+          end: task.start + timeOriginTsInMs,
         });
       }
 
       if (index === longTasks.length - 1) {
         quietPeriods.push({
-          start: task.end + navStartTsInMs,
+          start: task.end + timeOriginTsInMs,
           end: traceEndTsInMs,
         });
       } else {
         quietPeriods.push({
-          start: task.end + navStartTsInMs,
-          end: longTasks[index + 1].start + navStartTsInMs,
+          start: task.end + timeOriginTsInMs,
+          end: longTasks[index + 1].start + timeOriginTsInMs,
         });
       }
     });
@@ -84,19 +84,19 @@ class Interactive extends ComputedMetric {
    * Finds the first time period where a network quiet period and a CPU quiet period overlap.
    * @param {Array<TimePeriod>} longTasks
    * @param {Array<LH.Artifacts.NetworkRequest>} networkRecords
-   * @param {LH.Artifacts.TraceOfTab} traceOfTab
+   * @param {LH.Artifacts.ProcessedNavigation} processedNavigation
    * @return {{cpuQuietPeriod: TimePeriod, networkQuietPeriod: TimePeriod, cpuQuietPeriods: Array<TimePeriod>, networkQuietPeriods: Array<TimePeriod>}}
    */
-  static findOverlappingQuietPeriods(longTasks, networkRecords, traceOfTab) {
-    const FcpTsInMs = traceOfTab.timestamps.firstContentfulPaint / 1000;
+  static findOverlappingQuietPeriods(longTasks, networkRecords, processedNavigation) {
+    const FcpTsInMs = processedNavigation.timestamps.firstContentfulPaint / 1000;
 
     /** @type {function(TimePeriod):boolean} */
     const isLongEnoughQuietPeriod = period =>
         period.end > FcpTsInMs + REQUIRED_QUIET_WINDOW &&
         period.end - period.start >= REQUIRED_QUIET_WINDOW;
-    const networkQuietPeriods = this._findNetworkQuietPeriods(networkRecords, traceOfTab)
+    const networkQuietPeriods = this._findNetworkQuietPeriods(networkRecords, processedNavigation)
         .filter(isLongEnoughQuietPeriod);
-    const cpuQuietPeriods = this._findCPUQuietPeriods(longTasks, traceOfTab)
+    const cpuQuietPeriods = this._findCPUQuietPeriods(longTasks, processedNavigation)
         .filter(isLongEnoughQuietPeriod);
 
     const cpuQueue = cpuQuietPeriods.slice();
@@ -141,41 +141,42 @@ class Interactive extends ComputedMetric {
   }
 
   /**
-   * @param {LH.Artifacts.MetricComputationData} data
-   * @param {LH.Audit.Context} context
+   * @param {LH.Artifacts.NavigationMetricComputationData} data
+   * @param {LH.Artifacts.ComputedContext} context
    * @return {Promise<LH.Artifacts.LanternMetric>}
    */
   static computeSimulatedMetric(data, context) {
-    return LanternInteractive.request(data, context);
+    const metricData = NavigationMetric.getMetricComputationInput(data);
+    return LanternInteractive.request(metricData, context);
   }
 
   /**
-   * @param {LH.Artifacts.MetricComputationData} data
+   * @param {LH.Artifacts.NavigationMetricComputationData} data
    * @return {Promise<LH.Artifacts.Metric>}
    */
   static computeObservedMetric(data) {
-    const {traceOfTab, networkRecords} = data;
+    const {processedTrace, processedNavigation, networkRecords} = data;
 
-    if (!traceOfTab.timestamps.domContentLoaded) {
+    if (!processedNavigation.timestamps.domContentLoaded) {
       throw new LHError(LHError.errors.NO_DCL);
     }
 
-    const longTasks = TracingProcessor.getMainThreadTopLevelEvents(traceOfTab)
+    const longTasks = TracingProcessor.getMainThreadTopLevelEvents(processedTrace)
         .filter(event => event.duration >= 50);
     const quietPeriodInfo = Interactive.findOverlappingQuietPeriods(
       longTasks,
       networkRecords,
-      traceOfTab
+      processedNavigation
     );
 
     const cpuQuietPeriod = quietPeriodInfo.cpuQuietPeriod;
 
     const timestamp = Math.max(
       cpuQuietPeriod.start,
-      traceOfTab.timestamps.firstContentfulPaint / 1000,
-      traceOfTab.timestamps.domContentLoaded / 1000
+      processedNavigation.timestamps.firstContentfulPaint / 1000,
+      processedNavigation.timestamps.domContentLoaded / 1000
     ) * 1000;
-    const timing = (timestamp - traceOfTab.timestamps.navigationStart) / 1000;
+    const timing = (timestamp - processedNavigation.timestamps.timeOrigin) / 1000;
     return Promise.resolve({timing, timestamp});
   }
 }

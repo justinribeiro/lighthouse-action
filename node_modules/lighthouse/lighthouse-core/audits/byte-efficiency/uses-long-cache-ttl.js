@@ -1,11 +1,10 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
 'use strict';
 
-const assert = require('assert');
 const parseCacheControl = require('parse-cache-control');
 const Audit = require('../audit.js');
 const NetworkRequest = require('../../lib/network-request.js');
@@ -22,7 +21,7 @@ const UIStrings = {
   /** Description of a Lighthouse audit that tells the user *why* they need to adopt a long cache lifetime policy. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation. */
   description:
     'A long cache lifetime can speed up repeat visits to your page. ' +
-    '[Learn more](https://web.dev/uses-long-cache-ttl).',
+    '[Learn more](https://web.dev/uses-long-cache-ttl/).',
   /** [ICU Syntax] Label for the audit identifying network resources with inefficient cache values. Clicking this will expand the audit to show the resources. */
   displayValue: `{itemCount, plural,
     =1 {1 resource found}
@@ -46,7 +45,7 @@ class CacheHeaders extends Audit {
       failureTitle: str_(UIStrings.failureTitle),
       description: str_(UIStrings.description),
       scoreDisplayMode: Audit.SCORING_MODES.NUMERIC,
-      requiredArtifacts: ['devtoolsLogs', 'traces'],
+      requiredArtifacts: ['devtoolsLogs'],
     };
   }
 
@@ -55,11 +54,11 @@ class CacheHeaders extends Audit {
    */
   static get defaultOptions() {
     return {
-      // 50th and 75th percentiles HTTPArchive -> 50 and 75
+      // 50th and 25th percentiles HTTPArchive -> 50 and 75, with p10 derived from them.
       // https://bigquery.cloud.google.com/table/httparchive:lighthouse.2018_04_01_mobile?pli=1
-      // see https://www.desmos.com/calculator/8meohdnjbl
-      scorePODR: 4 * 1024,
-      scoreMedian: 128 * 1024,
+      // see https://www.desmos.com/calculator/uzsyl2hbcb
+      p10: 28 * 1024,
+      median: 128 * 1024,
     };
   }
 
@@ -76,7 +75,9 @@ class CacheHeaders extends Audit {
     // Based on UMA stats for HttpCache.StaleEntry.Validated.Age, see https://www.desmos.com/calculator/7v0qh1nzvh
     // Example: a max-age of 12 hours already covers ~50% of cases, doubling to 24 hours covers ~10% more.
     const RESOURCE_AGE_IN_HOURS_DECILES = [0, 0.2, 1, 3, 8, 12, 24, 48, 72, 168, 8760, Infinity];
-    assert.ok(RESOURCE_AGE_IN_HOURS_DECILES.length === 12, 'deciles 0-10 and 1 for overflow');
+    if (RESOURCE_AGE_IN_HOURS_DECILES.length !== 12) {
+      throw new Error('deciles 0-10 and 1 for overflow');
+    }
 
     const maxAgeInHours = maxAgeInSeconds / 3600;
     const upperDecileIndex = RESOURCE_AGE_IN_HOURS_DECILES.findIndex(
@@ -143,7 +144,7 @@ class CacheHeaders extends Audit {
   static isCacheableAsset(record) {
     const CACHEABLE_STATUS_CODES = new Set([200, 203, 206]);
 
-    /** @type {Set<LH.Crdp.Page.ResourceType>} */
+    /** @type {Set<LH.Crdp.Network.ResourceType>} */
     const STATIC_RESOURCE_TYPES = new Set([
       NetworkRequest.TYPES.Font,
       NetworkRequest.TYPES.Image,
@@ -153,7 +154,8 @@ class CacheHeaders extends Audit {
     ]);
 
     // It's not a request loaded over the network, caching makes no sense
-    if (URL.NON_NETWORK_PROTOCOLS.includes(record.protocol)) return false;
+    if (NetworkRequest.isNonNetworkRequest(record)) return false;
+
 
     return (
       CACHEABLE_STATUS_CODES.has(record.statusCode) &&
@@ -165,7 +167,7 @@ class CacheHeaders extends Audit {
    * Returns true if headers suggest a record should not be cached for a long time.
    * @param {Map<string, string>} headers
    * @param {ReturnType<typeof parseCacheControl>} cacheControl
-   * @returns {boolean}
+   * @return {boolean}
    */
   static shouldSkipRecord(headers, cacheControl) {
     // The HTTP/1.0 Pragma header can disable caching if cache-control is not set, see https://tools.ietf.org/html/rfc7234#section-5.4
@@ -195,7 +197,6 @@ class CacheHeaders extends Audit {
     const devtoolsLogs = artifacts.devtoolsLogs[Audit.DEFAULT_PASS];
     return NetworkRecords.request(devtoolsLogs, context).then(records => {
       const results = [];
-      let queryStringCount = 0;
       let totalWastedBytes = 0;
 
       for (const record of records) {
@@ -236,7 +237,6 @@ class CacheHeaders extends Audit {
         const wastedBytes = (1 - cacheHitProbability) * totalBytes;
 
         totalWastedBytes += wastedBytes;
-        if (url.includes('?')) queryStringCount++;
 
         // Include cacheControl info (if it exists) per url as a diagnostic.
         /** @type {LH.Audit.Details.DebugData|undefined} */
@@ -265,9 +265,8 @@ class CacheHeaders extends Audit {
       });
 
       const score = Audit.computeLogNormalScore(
-        totalWastedBytes,
-        context.options.scorePODR,
-        context.options.scoreMedian
+        {p10: context.options.p10, median: context.options.median},
+        totalWastedBytes
       );
 
       /** @type {LH.Audit.Details.Table['headings']} */
@@ -276,7 +275,7 @@ class CacheHeaders extends Audit {
         // TODO(i18n): pre-compute localized duration
         {key: 'cacheLifetimeMs', itemType: 'ms', text: str_(i18n.UIStrings.columnCacheTTL),
           displayUnit: 'duration'},
-        {key: 'totalBytes', itemType: 'bytes', text: str_(i18n.UIStrings.columnSize),
+        {key: 'totalBytes', itemType: 'bytes', text: str_(i18n.UIStrings.columnTransferSize),
           displayUnit: 'kb', granularity: 1},
       ];
 
@@ -286,13 +285,8 @@ class CacheHeaders extends Audit {
       return {
         score,
         numericValue: totalWastedBytes,
+        numericUnit: 'byte',
         displayValue: str_(UIStrings.displayValue, {itemCount: results.length}),
-        extendedInfo: {
-          value: {
-            results,
-            queryStringCount,
-          },
-        },
         details,
       };
     });

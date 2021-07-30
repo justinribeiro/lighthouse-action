@@ -1,38 +1,22 @@
 /**
- * @license Copyright 2019 Google Inc. All Rights Reserved.
+ * @license Copyright 2019 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
 'use strict';
 
-/** @typedef {import('../driver.js')} Driver */
-
-const Gatherer = require('./gatherer.js');
+const FRGatherer = require('../../fraggle-rock/gather/base-gatherer.js');
 const URL = require('../../lib/url-shim.js');
-
-/**
- * This function fetches source maps; it is careful not to parse the response as JSON, as it will
- * just need to be serialized again over the protocol, and source maps can
- * be huge.
- *
- * @param {string} url
- * @return {Promise<string>}
- */
-/* istanbul ignore next */
-async function fetchSourceMap(url) {
-  // eslint-disable-next-line no-undef
-  const response = await fetch(url);
-  if (response.ok) {
-    return response.text();
-  } else {
-    throw new Error(`Received status code ${response.status} for ${url}`);
-  }
-}
 
 /**
  * @fileoverview Gets JavaScript source maps.
  */
-class SourceMaps extends Gatherer {
+class SourceMaps extends FRGatherer {
+  /** @type {LH.Gatherer.GathererMeta} */
+  meta = {
+    supportedModes: ['timespan', 'navigation'],
+  }
+
   constructor() {
     super();
     /** @type {LH.Crdp.Debugger.ScriptParsedEvent[]} */
@@ -41,16 +25,16 @@ class SourceMaps extends Gatherer {
   }
 
   /**
-   * @param {Driver} driver
+   * @param {LH.Gatherer.FRTransitionalDriver} driver
    * @param {string} sourceMapUrl
    * @return {Promise<LH.Artifacts.RawSourceMap>}
    */
-  async fetchSourceMapInPage(driver, sourceMapUrl) {
-    driver.setNextProtocolTimeout(1500);
-    /** @type {string} */
-    const sourceMapJson =
-      await driver.evaluateAsync(`(${fetchSourceMap})(${JSON.stringify(sourceMapUrl)})`);
-    return JSON.parse(sourceMapJson);
+  async fetchSourceMap(driver, sourceMapUrl) {
+    const response = await driver.fetcher.fetchResource(sourceMapUrl, {timeout: 1500});
+    if (response.content === null) {
+      throw new Error(`Failed fetching source map (${response.status})`);
+    }
+    return JSON.parse(response.content);
   }
 
   /**
@@ -72,15 +56,6 @@ class SourceMaps extends Gatherer {
   }
 
   /**
-   * @param {LH.Gatherer.PassContext} passContext
-   */
-  async beforePass(passContext) {
-    const driver = passContext.driver;
-    driver.on('Debugger.scriptParsed', this.onScriptParsed);
-    await driver.sendCommand('Debugger.enable');
-  }
-
-  /**
    * @param {string} url
    * @param {string} base
    * @return {string|undefined}
@@ -94,7 +69,7 @@ class SourceMaps extends Gatherer {
   }
 
   /**
-   * @param {Driver} driver
+   * @param {LH.Gatherer.FRTransitionalDriver} driver
    * @param {LH.Crdp.Debugger.ScriptParsedEvent} event
    * @return {Promise<LH.Artifacts.SourceMap>}
    */
@@ -124,7 +99,10 @@ class SourceMaps extends Gatherer {
     try {
       const map = isSourceMapADataUri ?
           this.parseSourceMapFromDataUrl(rawSourceMapUrl) :
-          await this.fetchSourceMapInPage(driver, rawSourceMapUrl);
+          await this.fetchSourceMap(driver, rawSourceMapUrl);
+      if (map.sections) {
+        map.sections = map.sections.filter(section => section.map);
+      }
       return {
         scriptUrl,
         sourceMapUrl,
@@ -140,18 +118,31 @@ class SourceMaps extends Gatherer {
   }
 
   /**
-   * @param {LH.Gatherer.PassContext} passContext
+   * @param {LH.Gatherer.FRTransitionalContext} context
+   */
+  async startSensitiveInstrumentation(context) {
+    const session = context.driver.defaultSession;
+    session.on('Debugger.scriptParsed', this.onScriptParsed);
+    await session.sendCommand('Debugger.enable');
+  }
+
+  /**
+   * @param {LH.Gatherer.FRTransitionalContext} context
+   */
+  async stopSensitiveInstrumentation(context) {
+    const session = context.driver.defaultSession;
+    await session.sendCommand('Debugger.disable');
+    session.off('Debugger.scriptParsed', this.onScriptParsed);
+  }
+
+  /**
+   * @param {LH.Gatherer.FRTransitionalContext} context
    * @return {Promise<LH.Artifacts['SourceMaps']>}
    */
-  async afterPass(passContext) {
-    const driver = passContext.driver;
-
-    driver.off('Debugger.scriptParsed', this.onScriptParsed);
-    await driver.sendCommand('Debugger.disable');
-
+  async getArtifact(context) {
+    await context.driver.fetcher.enable();
     const eventProcessPromises = this._scriptParsedEvents
-      .map((event) => this._retrieveMapFromScriptParsedEvent(driver, event));
-
+      .map((event) => this._retrieveMapFromScriptParsedEvent(context.driver, event));
     return Promise.all(eventProcessPromises);
   }
 }

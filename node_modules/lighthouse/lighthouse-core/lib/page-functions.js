@@ -1,99 +1,73 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
-// @ts-nocheck
 'use strict';
 
-/* global window document Node ShadowRoot */
+/**
+ * @fileoverview
+ * Helper functions that are passed by `toString()` by Driver to be evaluated in target page.
+ *
+ * Every function in this module only runs in the browser, so it is ignored from
+ * the c8 code coverage tool. See c8.sh
+ *
+ * Important: this module should only be imported like this:
+ *     const pageFunctions = require('...');
+ * Never like this:
+ *     const {justWhatINeed} = require('...');
+ * Otherwise, minification will mangle the variable names and break usage.
+ */
 
 /**
- * Helper functions that are passed by `toString()` by Driver to be evaluated in target page.
+ * `typed-query-selector`'s CSS selector parser.
+ * @template {string} T
+ * @typedef {import('typed-query-selector/parser').ParseSelector<T>} ParseSelector
  */
+
+/* global window document Node ShadowRoot HTMLElement */
 
 /**
  * The `exceptionDetails` provided by the debugger protocol does not contain the useful
  * information such as name, message, and stack trace of the error when it's wrapped in a
  * promise. Instead, map to a successful object that contains this information.
- * @param {string|Error} err The error to convert
+ * @param {string|Error} [err] The error to convert
+ * @return {{__failedInBrowser: boolean, name: string, message: string, stack: string|undefined}}
  */
-/* istanbul ignore next */
 function wrapRuntimeEvalErrorInBrowser(err) {
-  err = err || new Error();
-  const fallbackMessage = typeof err === 'string' ? err : 'unknown error';
+  if (!err || typeof err === 'string') {
+    err = new Error(err);
+  }
 
   return {
     __failedInBrowser: true,
     name: err.name || 'Error',
-    message: err.message || fallbackMessage,
-    stack: err.stack || (new Error()).stack,
+    message: err.message || 'unknown error',
+    stack: err.stack,
   };
 }
 
 /**
- * Used by _waitForCPUIdle and executed in the context of the page, updates the ____lastLongTask
- * property on window to the end time of the last long task.
- */
-/* istanbul ignore next */
-function registerPerformanceObserverInPage() {
-  window.____lastLongTask = window.__perfNow();
-  const observer = new window.PerformanceObserver(entryList => {
-    const entries = entryList.getEntries();
-    for (const entry of entries) {
-      if (entry.entryType === 'longtask') {
-        const taskEnd = entry.startTime + entry.duration;
-        window.____lastLongTask = Math.max(window.____lastLongTask, taskEnd);
-      }
-    }
-  });
-
-  observer.observe({entryTypes: ['longtask']});
-  // HACK: A PerformanceObserver will be GC'd if there are no more references to it, so attach it to
-  // window to ensure we still receive longtask notifications. See https://crbug.com/742530.
-  // For an example test of this behavior see https://gist.github.com/patrickhulce/69d8bed1807e762218994b121d06fea6.
-  //   FIXME COMPAT: This hack isn't neccessary as of Chrome 62.0.3176.0
-  //   https://bugs.chromium.org/p/chromium/issues/detail?id=742530#c7
-  window.____lhPerformanceObserver = observer;
-}
-
-/**
- * Used by _waitForCPUIdle and executed in the context of the page, returns time since last long task.
- */
-/* istanbul ignore next */
-function checkTimeSinceLastLongTask() {
-  // Wait for a delta before returning so that we're sure the PerformanceObserver
-  // has had time to register the last longtask
-  return new window.__nativePromise(resolve => {
-    const timeoutRequested = window.__perfNow() + 50;
-
-    setTimeout(() => {
-      // Double check that a long task hasn't happened since setTimeout
-      const timeoutFired = window.__perfNow();
-      const timeSinceLongTask = timeoutFired - timeoutRequested < 50 ?
-          timeoutFired - window.____lastLongTask : 0;
-      resolve(timeSinceLongTask);
-    }, 50);
-  });
-}
-
-/**
- * @param {string=} selector Optional simple CSS selector to filter nodes on.
+ * @template {string} T
+ * @param {T} selector Optional simple CSS selector to filter nodes on.
  *     Combinators are not supported.
- * @return {Array<HTMLElement>}
+ * @return {Array<ParseSelector<T>>}
  */
-/* istanbul ignore next */
 function getElementsInDocument(selector) {
   const realMatchesFn = window.__ElementMatches || window.Element.prototype.matches;
-  /** @type {Array<HTMLElement>} */
+  /** @type {Array<ParseSelector<T>>} */
   const results = [];
 
-  /** @param {NodeListOf<HTMLElement>} nodes */
+  /** @param {NodeListOf<Element>} nodes */
   const _findAllElements = nodes => {
     for (let i = 0, el; el = nodes[i]; ++i) {
       if (!selector || realMatchesFn.call(el, selector)) {
-        results.push(el);
+        /** @type {ParseSelector<T>} */
+        // @ts-expect-error - el is verified as matching above, tsc just can't verify it through the .call().
+        const matchedEl = el;
+        results.push(matchedEl);
       }
+
       // If the element has a shadow root, dig deeper.
       if (el.shadowRoot) {
         _findAllElements(el.shadowRoot.querySelectorAll('*'));
@@ -111,114 +85,252 @@ function getElementsInDocument(selector) {
  * @param {Array<string>=} ignoreAttrs An optional array of attribute tags to not include in the HTML snippet.
  * @return {string}
  */
-/* istanbul ignore next */
-function getOuterHTMLSnippet(element, ignoreAttrs = []) {
-  try {
-    // ShadowRoots are sometimes passed in; use their hosts' outerHTML.
-    if (element instanceof ShadowRoot) {
-      element = element.host;
-    }
+function getOuterHTMLSnippet(element, ignoreAttrs = [], snippetCharacterLimit = 500) {
+  const ATTRIBUTE_CHAR_LIMIT = 75;
+  // Autofill information that is injected into the snippet via AutofillShowTypePredictions
+  // TODO(paulirish): Don't clean title attribute from all elements if it's unnecessary
+  const autoFillIgnoreAttrs = ['autofill-information', 'autofill-prediction', 'title'];
 
+  // ShadowRoots are sometimes passed in; use their hosts' outerHTML.
+  if (element instanceof ShadowRoot) {
+    element = element.host;
+  }
+
+  try {
+    /** @type {Element} */
+    // @ts-expect-error - clone will be same type as element - see https://github.com/microsoft/TypeScript/issues/283
     const clone = element.cloneNode();
-    ignoreAttrs.forEach(attribute =>{
+
+    // Prevent any potential side-effects by appending to a template element.
+    // See https://github.com/GoogleChrome/lighthouse/issues/11465
+    const template = element.ownerDocument.createElement('template');
+    template.content.append(clone);
+    ignoreAttrs.concat(autoFillIgnoreAttrs).forEach(attribute =>{
       clone.removeAttribute(attribute);
     });
+    let charCount = 0;
+    for (const attributeName of clone.getAttributeNames()) {
+      if (charCount > snippetCharacterLimit) {
+        clone.removeAttribute(attributeName);
+        continue;
+      }
+
+      let attributeValue = clone.getAttribute(attributeName);
+      if (attributeValue === null) continue; // Can't happen.
+
+      let dirty = false;
+
+      // Replace img.src with img.currentSrc. Same for audio and video.
+      if (attributeName === 'src' && 'currentSrc' in element) {
+        const elementWithSrc = /** @type {HTMLImageElement|HTMLMediaElement} */ (element);
+        const currentSrc = elementWithSrc.currentSrc;
+        // Only replace if the two URLs do not resolve to the same location.
+        const documentHref = elementWithSrc.ownerDocument.location.href;
+        if (new URL(attributeValue, documentHref).toString() !== currentSrc) {
+          attributeValue = currentSrc;
+          dirty = true;
+        }
+      }
+
+      // Elide attribute value if too long.
+      if (attributeValue.length > ATTRIBUTE_CHAR_LIMIT) {
+        attributeValue = attributeValue.slice(0, ATTRIBUTE_CHAR_LIMIT - 1) + '…';
+        dirty = true;
+      }
+
+      if (dirty) clone.setAttribute(attributeName, attributeValue);
+      charCount += attributeName.length + attributeValue.length;
+    }
+
     const reOpeningTag = /^[\s\S]*?>/;
-    const match = clone.outerHTML.match(reOpeningTag);
-    return (match && match[0]) || '';
+    const [match] = clone.outerHTML.match(reOpeningTag) || [];
+    if (match && charCount > snippetCharacterLimit) {
+      return match.slice(0, match.length - 1) + ' …>';
+    }
+    return match || '';
   } catch (_) {
     // As a last resort, fall back to localName.
     return `<${element.localName}>`;
   }
 }
 
+/**
+ * Get the maximum size of a texture the GPU can handle
+ * @see https://bugs.chromium.org/p/chromium/issues/detail?id=770769#c13
+ * @return {number}
+ */
+function getMaxTextureSize() {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl');
+    if (!gl) throw new Error('no webgl');
+    const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    return maxTextureSize;
+  } catch (e) {
+    // If the above fails for any reason we need a fallback number;
+    // 4096 is the max texture size on a Pixel 2 XL, so to be conservative we'll use a low value like it.
+    // But we'll subtract 1 just to identify this case later on.
+    const MAX_TEXTURE_SIZE_FALLBACK = 4095;
+    return MAX_TEXTURE_SIZE_FALLBACK;
+  }
+}
 
 /**
  * Computes a memory/CPU performance benchmark index to determine rough device class.
+ * @see https://github.com/GoogleChrome/lighthouse/issues/9085
  * @see https://docs.google.com/spreadsheets/d/1E0gZwKsxegudkjJl8Fki_sOwHKpqgXwt8aBAfuUaB8A/edit?usp=sharing
  *
- * The benchmark creates a string of length 100,000 in a loop.
- * The returned index is the number of times per second the string can be created.
+ * Historically (until LH 6.3), this benchmark created a string of length 100,000 in a loop, and returned
+ * the number of times per second the string can be created.
  *
- *  - 750+ is a desktop-class device, Core i3 PC, iPhone X, etc
- *  - 300+ is a high-end Android phone, Galaxy S8, low-end Chromebook, etc
- *  - 75+ is a mid-tier Android phone, Nexus 5X, etc
- *  - <75 is a budget Android phone, Alcatel Ideal, Galaxy J2, etc
+ * Changes to v8 in 8.6.106 changed this number and also made Chrome more variable w.r.t GC interupts.
+ * This benchmark now is a hybrid of a similar GC-heavy approach to the original benchmark and an array
+ * copy benchmark.
+ *
+ * As of Chrome m86...
+ *
+ *  - 1000+ is a desktop-class device, Core i3 PC, iPhone X, etc
+ *  - 800+ is a high-end Android phone, Galaxy S8, low-end Chromebook, etc
+ *  - 125+ is a mid-tier Android phone, Moto G4, etc
+ *  - <125 is a budget Android phone, Alcatel Ideal, Galaxy J2, etc
+ * @return {number}
  */
-/* istanbul ignore next */
-function ultradumbBenchmark() {
-  const start = Date.now();
-  let iterations = 0;
+function computeBenchmarkIndex() {
+  /**
+   * The GC-heavy benchmark that creates a string of length 10000 in a loop.
+   * The returned index is the number of times per second the string can be created divided by 10.
+   * The division by 10 is to keep similar magnitudes to an earlier version of BenchmarkIndex that
+   * used a string length of 100000 instead of 10000.
+   */
+  function benchmarkIndexGC() {
+    const start = Date.now();
+    let iterations = 0;
 
-  while (Date.now() - start < 500) {
-    let s = ''; // eslint-disable-line no-unused-vars
-    for (let j = 0; j < 100000; j++) s += 'a';
+    while (Date.now() - start < 500) {
+      let s = '';
+      for (let j = 0; j < 10000; j++) s += 'a'; // eslint-disable-line no-unused-vars
 
-    iterations++;
+      iterations++;
+    }
+
+    const durationInSeconds = (Date.now() - start) / 1000;
+    return Math.round(iterations / 10 / durationInSeconds);
   }
 
-  const durationInSeconds = (Date.now() - start) / 1000;
-  return Math.round(iterations / durationInSeconds);
+  /**
+   * The non-GC-dependent benchmark that copies integers back and forth between two arrays of length 100000.
+   * The returned index is the number of times per second a copy can be made, divided by 10.
+   * The division by 10 is to keep similar magnitudes to the GC-dependent version.
+   */
+  function benchmarkIndexNoGC() {
+    const arrA = [];
+    const arrB = [];
+    for (let i = 0; i < 100000; i++) arrA[i] = arrB[i] = i;
+
+    const start = Date.now();
+    let iterations = 0;
+
+    // Some Intel CPUs have a performance cliff due to unlucky JCC instruction alignment.
+    // Two possible fixes: call Date.now less often, or manually unroll the inner loop a bit.
+    // We'll call Date.now less and only check the duration on every 10th iteration for simplicity.
+    // See https://bugs.chromium.org/p/v8/issues/detail?id=10954#c1.
+    while (iterations % 10 !== 0 || Date.now() - start < 500) {
+      const src = iterations % 2 === 0 ? arrA : arrB;
+      const tgt = iterations % 2 === 0 ? arrB : arrA;
+
+      for (let j = 0; j < src.length; j++) tgt[j] = src[j];
+
+      iterations++;
+    }
+
+    const durationInSeconds = (Date.now() - start) / 1000;
+    return Math.round(iterations / 10 / durationInSeconds);
+  }
+
+  // The final BenchmarkIndex is a simple average of the two components.
+  return (benchmarkIndexGC() + benchmarkIndexNoGC()) / 2;
 }
 
 /**
  * Adapted from DevTools' SDK.DOMNode.prototype.path
- *   https://github.com/ChromeDevTools/devtools-frontend/blob/7a2e162ddefd/front_end/sdk/DOMModel.js#L530-L552
- * TODO: Doesn't handle frames or shadow roots...
+ *   https://github.com/ChromeDevTools/devtools-frontend/blob/4fff931bb/front_end/sdk/DOMModel.js#L625-L647
+ * Backend: https://source.chromium.org/search?q=f:node.cc%20symbol:PrintNodePathTo&sq=&ss=chromium%2Fchromium%2Fsrc
+ *
+ * TODO: DevTools nodePath handling doesn't support iframes, but probably could. https://crbug.com/1127635
  * @param {Node} node
+ * @return {string}
  */
-/* istanbul ignore next */
 function getNodePath(node) {
+  // For our purposes, there's no worthwhile difference between shadow root and document fragment
+  // We can consider them entirely synonymous.
+  /** @param {Node} node @return {node is ShadowRoot} */
+  const isShadowRoot = node => node.nodeType === Node.DOCUMENT_FRAGMENT_NODE;
   /** @param {Node} node */
+  const getNodeParent = node => isShadowRoot(node) ? node.host : node.parentNode;
+
+  /** @param {Node} node @return {number|'a'} */
   function getNodeIndex(node) {
+    if (isShadowRoot(node)) {
+      // User-agent shadow roots get 'u'. Non-UA shadow roots get 'a'.
+      return 'a';
+    }
     let index = 0;
     let prevNode;
     while (prevNode = node.previousSibling) {
       node = prevNode;
       // skip empty text nodes
-      if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim().length === 0) continue;
+      if (node.nodeType === Node.TEXT_NODE && (node.nodeValue || '').trim().length === 0) continue;
       index++;
     }
     return index;
   }
 
+  /** @type {Node|null} */
+  let currentNode = node;
   const path = [];
-  while (node && node.parentNode) {
-    const index = getNodeIndex(node);
-    path.push([index, node.nodeName]);
-    node = node.parentNode;
+  while (currentNode && getNodeParent(currentNode)) {
+    const index = getNodeIndex(currentNode);
+    path.push([index, currentNode.nodeName]);
+    currentNode = getNodeParent(currentNode);
   }
   path.reverse();
   return path.join(',');
 }
 
 /**
- * @param {Element} node
+ * @param {Element} element
  * @return {string}
+ *
+ * Note: CSS Selectors having no standard mechanism to describe shadow DOM piercing. So we can't.
+ *
+ * If the node resides within shadow DOM, the selector *only* starts from the shadow root.
+ * For example, consider this img within a <section> within a shadow root..
+ *  - DOM: <html> <body> <div> #shadow-root <section> <img/>
+ *  - nodePath: 0,HTML,1,BODY,1,DIV,a,#document-fragment,0,SECTION,0,IMG
+ *  - nodeSelector: section > img
  */
-/* istanbul ignore next */
-function getNodeSelector(node) {
+function getNodeSelector(element) {
   /**
-   * @param {Element} node
+   * @param {Element} element
    */
-  function getSelectorPart(node) {
-    let part = node.tagName.toLowerCase();
-    if (node.id) {
-      part += '#' + node.id;
-    } else if (node.classList.length > 0) {
-      part += '.' + node.classList[0];
+  function getSelectorPart(element) {
+    let part = element.tagName.toLowerCase();
+    if (element.id) {
+      part += '#' + element.id;
+    } else if (element.classList.length > 0) {
+      part += '.' + element.classList[0];
     }
     return part;
   }
 
   const parts = [];
   while (parts.length < 4) {
-    parts.unshift(getSelectorPart(node));
-    if (!node.parentElement) {
+    parts.unshift(getSelectorPart(element));
+    if (!element.parentElement) {
       break;
     }
-    node = node.parentElement;
-    if (node.tagName === 'HTML') {
+    element = element.parentElement;
+    if (element.tagName === 'HTML') {
       break;
     }
   }
@@ -232,11 +344,10 @@ function getNodeSelector(node) {
  * @param {HTMLElement} element
  * @return {boolean}
  */
-/* istanbul ignore next */
 function isPositionFixed(element) {
   /**
    * @param {HTMLElement} element
-   * @param {string} attr
+   * @param {'overflowY'|'position'} attr
    * @return {string}
    */
   function getStyleAttrValue(element, attr) {
@@ -246,11 +357,13 @@ function isPositionFixed(element) {
 
   // Position fixed/sticky has no effect in case when document does not scroll.
   const htmlEl = document.querySelector('html');
+  if (!htmlEl) throw new Error('html element not found in document');
   if (htmlEl.scrollHeight <= htmlEl.clientHeight ||
       !['scroll', 'auto', 'visible'].includes(getStyleAttrValue(htmlEl, 'overflowY'))) {
     return false;
   }
 
+  /** @type {HTMLElement | null} */
   let currentEl = element;
   while (currentEl) {
     const position = getStyleAttrValue(currentEl, 'position');
@@ -265,12 +378,11 @@ function isPositionFixed(element) {
 /**
  * Generate a human-readable label for the given element, based on end-user facing
  * strings like the innerText or alt attribute.
- * Falls back to the tagName if no useful label is found.
- * @param {HTMLElement} node
- * @return {string|null}
+ * Returns label string or null if no useful label is found.
+ * @param {Element} element
+ * @return {string | null}
  */
-/* istanbul ignore next */
-function getNodeLabel(node) {
+function getNodeLabel(element) {
   // Inline so that audits that import getNodeLabel don't
   // also need to import truncate
   /**
@@ -282,40 +394,155 @@ function getNodeLabel(node) {
     if (str.length <= maxLength) {
       return str;
     }
-    return str.slice(0, maxLength - 1) + '…';
+    // Take advantage of string iterator multi-byte character awareness.
+    // Regular `.slice` will ignore unicode character boundaries and lead to malformed text.
+    return Array.from(str).slice(0, maxLength - 1).join('') + '…';
   }
 
-  const tagName = node.tagName.toLowerCase();
+  const tagName = element.tagName.toLowerCase();
   // html and body content is too broad to be useful, since they contain all page content
   if (tagName !== 'html' && tagName !== 'body') {
-    const nodeLabel = node.innerText || node.getAttribute('alt') || node.getAttribute('aria-label');
+    const nodeLabel = element instanceof HTMLElement && element.innerText ||
+        element.getAttribute('alt') || element.getAttribute('aria-label');
     if (nodeLabel) {
       return truncate(nodeLabel, 80);
     } else {
       // If no useful label was found then try to get one from a child.
       // E.g. if an a tag contains an image but no text we want the image alt/aria-label attribute.
-      const nodeToUseForLabel = node.querySelector('[alt], [aria-label]');
+      const nodeToUseForLabel = element.querySelector('[alt], [aria-label]');
       if (nodeToUseForLabel) {
-        return getNodeLabel(/** @type {HTMLElement} */ (nodeToUseForLabel));
+        return getNodeLabel(nodeToUseForLabel);
       }
     }
   }
-  return tagName;
+  return null;
 }
+
+/**
+ * @param {Element} element
+ * @return {LH.Artifacts.Rect}
+ */
+function getBoundingClientRect(element) {
+  // The protocol does not serialize getters, so extract the values explicitly.
+  const rect = element.getBoundingClientRect();
+  return {
+    top: Math.round(rect.top),
+    bottom: Math.round(rect.bottom),
+    left: Math.round(rect.left),
+    right: Math.round(rect.right),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+  };
+}
+
+/**
+ * RequestIdleCallback shim that calculates the remaining deadline time in order to avoid a potential lighthouse
+ * penalty for tests run with simulated throttling. Reduces the deadline time to (50 - safetyAllowance) / cpuSlowdownMultiplier to
+ * ensure a long task is very unlikely if using the API correctly.
+ * @param {number} cpuSlowdownMultiplier
+ */
+function wrapRequestIdleCallback(cpuSlowdownMultiplier) {
+  const safetyAllowanceMs = 10;
+  const maxExecutionTimeMs = Math.floor((50 - safetyAllowanceMs) / cpuSlowdownMultiplier);
+  const nativeRequestIdleCallback = window.requestIdleCallback;
+  window.requestIdleCallback = (cb, options) => {
+    /**
+     * @type {Parameters<typeof window['requestIdleCallback']>[0]}
+     */
+    const cbWrap = (deadline) => {
+      const start = Date.now();
+      // @ts-expect-error - save original on non-standard property.
+      deadline.__timeRemaining = deadline.timeRemaining;
+      deadline.timeRemaining = () => {
+        // @ts-expect-error - access non-standard property.
+        const timeRemaining = deadline.__timeRemaining();
+        return Math.min(timeRemaining, Math.max(0, maxExecutionTimeMs - (Date.now() - start))
+        );
+      };
+      deadline.timeRemaining.toString = () => {
+        return 'function timeRemaining() { [native code] }';
+      };
+      cb(deadline);
+    };
+    return nativeRequestIdleCallback(cbWrap, options);
+  };
+  window.requestIdleCallback.toString = () => {
+    return 'function requestIdleCallback() { [native code] }';
+  };
+}
+
+/**
+ * @param {Element|ShadowRoot} element
+ * @return {LH.Artifacts.NodeDetails}
+ */
+function getNodeDetails(element) {
+  // This bookkeeping is for the FullPageScreenshot gatherer.
+  if (!window.__lighthouseNodesDontTouchOrAllVarianceGoesAway) {
+    window.__lighthouseNodesDontTouchOrAllVarianceGoesAway = new Map();
+  }
+
+  element = element instanceof ShadowRoot ? element.host : element;
+  const selector = getNodeSelector(element);
+
+  // Create an id that will be unique across all execution contexts.
+  // The id could be any arbitrary string, the exact value is not important.
+  // For example, tagName is added only because it might be useful for debugging.
+  // But execution id and map size are added to ensure uniqueness.
+  // We also dedupe this id so that details collected for an element within the same
+  // pass and execution context will share the same id. Not technically important, but
+  // cuts down on some duplication.
+  let lhId = window.__lighthouseNodesDontTouchOrAllVarianceGoesAway.get(element);
+  if (!lhId) {
+    lhId = [
+      window.__lighthouseExecutionContextId !== undefined ?
+        window.__lighthouseExecutionContextId :
+        'page',
+      window.__lighthouseNodesDontTouchOrAllVarianceGoesAway.size,
+      element.tagName,
+    ].join('-');
+    window.__lighthouseNodesDontTouchOrAllVarianceGoesAway.set(element, lhId);
+  }
+
+  const details = {
+    lhId,
+    devtoolsNodePath: getNodePath(element),
+    selector: selector,
+    boundingRect: getBoundingClientRect(element),
+    snippet: getOuterHTMLSnippet(element),
+    nodeLabel: getNodeLabel(element) || selector,
+  };
+
+  return details;
+}
+
+const getNodeDetailsString = `function getNodeDetails(element) {
+  ${getNodePath.toString()};
+  ${getNodeSelector.toString()};
+  ${getBoundingClientRect.toString()};
+  ${getOuterHTMLSnippet.toString()};
+  ${getNodeLabel.toString()};
+  return (${getNodeDetails.toString()})(element);
+}`;
 
 module.exports = {
   wrapRuntimeEvalErrorInBrowserString: wrapRuntimeEvalErrorInBrowser.toString(),
-  registerPerformanceObserverInPageString: registerPerformanceObserverInPage.toString(),
-  checkTimeSinceLastLongTaskString: checkTimeSinceLastLongTask.toString(),
+  wrapRuntimeEvalErrorInBrowser,
+  getElementsInDocument,
   getElementsInDocumentString: getElementsInDocument.toString(),
   getOuterHTMLSnippetString: getOuterHTMLSnippet.toString(),
   getOuterHTMLSnippet: getOuterHTMLSnippet,
-  ultradumbBenchmark: ultradumbBenchmark,
-  ultradumbBenchmarkString: ultradumbBenchmark.toString(),
+  computeBenchmarkIndex: computeBenchmarkIndex,
+  computeBenchmarkIndexString: computeBenchmarkIndex.toString(),
+  getMaxTextureSize,
+  getNodeDetailsString,
+  getNodeDetails,
   getNodePathString: getNodePath.toString(),
   getNodeSelectorString: getNodeSelector.toString(),
+  getNodePath,
   getNodeSelector: getNodeSelector,
   getNodeLabel: getNodeLabel,
   getNodeLabelString: getNodeLabel.toString(),
   isPositionFixedString: isPositionFixed.toString(),
+  wrapRequestIdleCallback,
+  getBoundingClientRectString: getBoundingClientRect.toString(),
 };

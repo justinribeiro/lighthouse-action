@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -13,9 +13,10 @@ const Audit = require('../audit.js');
 const i18n = require('../../lib/i18n/i18n.js');
 const BaseNode = require('../../lib/dependency-graph/base-node.js');
 const ByteEfficiencyAudit = require('./byte-efficiency-audit.js');
-const UnusedCSS = require('./unused-css-rules.js');
+const UnusedCSS = require('../../computed/unused-css.js');
 const NetworkRequest = require('../../lib/network-request.js');
-const TraceOfTab = require('../../computed/trace-of-tab.js');
+const ProcessedTrace = require('../../computed/processed-trace.js');
+const ProcessedNavigation = require('../../computed/processed-navigation.js');
 const LoadSimulator = require('../../computed/load-simulator.js');
 const FirstContentfulPaint = require('../../computed/metrics/first-contentful-paint.js');
 
@@ -35,7 +36,7 @@ const UIStrings = {
   /** Description of a Lighthouse audit that tells the user *why* they should reduce or remove network resources that block the initial render of the page. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation. */
   description: 'Resources are blocking the first paint of your page. Consider ' +
     'delivering critical JS/CSS inline and deferring all non-critical ' +
-    'JS/styles. [Learn more](https://web.dev/render-blocking-resources).',
+    'JS/styles. [Learn more](https://web.dev/render-blocking-resources/).',
 };
 
 const str_ = i18n.createMessageInstanceIdFn(__filename, UIStrings);
@@ -60,6 +61,50 @@ function getNodesAndTimingByUrl(nodeTimings) {
   return urlMap;
 }
 
+/**
+ * Adjust the timing of a node and its dependencies to account for stack specific overrides.
+ * @param {Map<Node, LH.Gatherer.Simulation.NodeTiming>} adjustedNodeTimings
+ * @param {Node} node
+ * @param {LH.Artifacts.DetectedStack[]} Stacks
+ */
+function adjustNodeTimings(adjustedNodeTimings, node, Stacks) {
+  const nodeTiming = adjustedNodeTimings.get(node);
+  if (!nodeTiming) return;
+  const stackSpecificTiming = computeStackSpecificTiming(node, nodeTiming, Stacks);
+  const difference = nodeTiming.duration - stackSpecificTiming.duration;
+  if (!difference) return;
+
+  // AMP's method of removal of stylesheets effectively removes all dependent nodes from the FCP graph
+  node.traverse(childNode => {
+    adjustedNodeTimings.delete(childNode);
+  });
+  adjustedNodeTimings.set(node, stackSpecificTiming);
+}
+
+/**
+ * Any stack specific timing overrides should go in this function.
+ * @see https://github.com/GoogleChrome/lighthouse/issues/2832#issuecomment-591066081
+ *
+ * @param {Node} node
+ * @param {LH.Gatherer.Simulation.NodeTiming} nodeTiming
+ * @param {LH.Artifacts.DetectedStack[]} Stacks
+ */
+function computeStackSpecificTiming(node, nodeTiming, Stacks) {
+  const stackSpecificTiming = {...nodeTiming};
+  if (Stacks.some(stack => stack.id === 'amp')) {
+    // AMP will load a linked stylesheet asynchronously if it has not been loaded after 2.1 seconds:
+    // https://github.com/ampproject/amphtml/blob/8e03ac2f315774070651584a7e046ff24212c9b1/src/font-stylesheet-timeout.js#L54-L59
+    // Any potential savings must only include time spent on AMP stylesheet nodes before 2.1 seconds.
+    if (node.type === BaseNode.TYPES.NETWORK &&
+        node.record.resourceType === NetworkRequest.TYPES.Stylesheet &&
+        nodeTiming.endTime > 2100) {
+      stackSpecificTiming.endTime = Math.max(nodeTiming.startTime, 2100);
+      stackSpecificTiming.duration = stackSpecificTiming.endTime - stackSpecificTiming.startTime;
+    }
+  }
+  return stackSpecificTiming;
+}
+
 class RenderBlockingResources extends Audit {
   /**
    * @return {LH.Audit.Meta}
@@ -68,11 +113,13 @@ class RenderBlockingResources extends Audit {
     return {
       id: 'render-blocking-resources',
       title: str_(UIStrings.title),
+      supportedModes: ['navigation'],
       scoreDisplayMode: Audit.SCORING_MODES.NUMERIC,
       description: str_(UIStrings.description),
       // TODO: look into adding an `optionalArtifacts` property that captures the non-required nature
       // of CSSUsage
-      requiredArtifacts: ['URL', 'TagsBlockingFirstPaint', 'traces', 'devtoolsLogs', 'CSSUsage'],
+      requiredArtifacts: ['URL', 'TagsBlockingFirstPaint', 'traces', 'devtoolsLogs', 'CSSUsage',
+        'GatherContext', 'Stacks'],
     };
   }
 
@@ -82,18 +129,28 @@ class RenderBlockingResources extends Audit {
    * @return {Promise<{wastedMs: number, results: Array<{url: string, totalBytes: number, wastedMs: number}>}>}
    */
   static async computeResults(artifacts, context) {
+    const gatherContext = artifacts.GatherContext;
     const trace = artifacts.traces[Audit.DEFAULT_PASS];
     const devtoolsLog = artifacts.devtoolsLogs[Audit.DEFAULT_PASS];
     const simulatorData = {devtoolsLog, settings: context.settings};
-    const traceOfTab = await TraceOfTab.request(trace, context);
+    const processedTrace = await ProcessedTrace.request(trace, context);
+    const processedNavigation = await ProcessedNavigation.request(processedTrace, context);
     const simulator = await LoadSimulator.request(simulatorData, context);
     const wastedCssBytes = await RenderBlockingResources.computeWastedCSSBytes(artifacts, context);
 
-    const metricSettings = {throttlingMethod: 'simulate'};
-    const metricComputationData = {trace, devtoolsLog, simulator, settings: metricSettings};
-    // @ts-ignore - TODO(bckenny): allow optional `throttling` settings
-    const fcpSimulation = await FirstContentfulPaint.request(metricComputationData, context);
-    const fcpTsInMs = traceOfTab.timestamps.firstContentfulPaint / 1000;
+    /** @type {Immutable<LH.Config.Settings>} */
+    const metricSettings = {
+      ...context.settings,
+      throttlingMethod: 'simulate',
+    };
+
+    const metricComputationData = {trace, devtoolsLog, gatherContext, simulator,
+      settings: metricSettings};
+
+    // Cast to just `LanternMetric` since we explicitly set `throttlingMethod: 'simulate'`.
+    const fcpSimulation = /** @type {LH.Artifacts.LanternMetric} */
+      (await FirstContentfulPaint.request(metricComputationData, context));
+    const fcpTsInMs = processedNavigation.timestamps.firstContentfulPaint / 1000;
 
     const nodesByUrl = getNodesAndTimingByUrl(fcpSimulation.optimisticEstimate.nodeTimings);
 
@@ -107,11 +164,13 @@ class RenderBlockingResources extends Audit {
 
       const {node, nodeTiming} = nodesByUrl[resource.tag.url];
 
+      const stackSpecificTiming = computeStackSpecificTiming(node, nodeTiming, artifacts.Stacks);
+
       // Mark this node and all its dependents as deferrable
       node.traverse(node => deferredNodeIds.add(node.id));
 
       // "wastedMs" is the download time of the network request, responseReceived - requestSent
-      const wastedMs = Math.round(nodeTiming.duration);
+      const wastedMs = Math.round(stackSpecificTiming.duration);
       if (wastedMs < MINIMUM_WASTED_MS) continue;
 
       results.push({
@@ -129,7 +188,8 @@ class RenderBlockingResources extends Audit {
       simulator,
       fcpSimulation.optimisticGraph,
       deferredNodeIds,
-      wastedCssBytes
+      wastedCssBytes,
+      artifacts.Stacks
     );
 
     return {results, wastedMs};
@@ -149,13 +209,17 @@ class RenderBlockingResources extends Audit {
    * @param {Node} fcpGraph
    * @param {Set<string>} deferredIds
    * @param {Map<string, number>} wastedCssBytesByUrl
+   * @param {LH.Artifacts.DetectedStack[]} Stacks
    * @return {number}
    */
-  static estimateSavingsWithGraphs(simulator, fcpGraph, deferredIds, wastedCssBytesByUrl) {
-    const originalEstimate = simulator.simulate(fcpGraph).timeInMs;
+  static estimateSavingsWithGraphs(simulator, fcpGraph, deferredIds, wastedCssBytesByUrl, Stacks) {
+    const {nodeTimings} = simulator.simulate(fcpGraph);
+    const adjustedNodeTimings = new Map(nodeTimings);
 
     let totalChildNetworkBytes = 0;
-    const minimalFCPGraph = /** @type {NetworkNode} */ (fcpGraph.cloneWithRelationships(node => {
+    const minimalFCPGraph = fcpGraph.cloneWithRelationships(node => {
+      adjustNodeTimings(adjustedNodeTimings, node, Stacks);
+
       // If a node can be deferred, exclude it from the new FCP graph
       const canDeferRequest = deferredIds.has(node.id);
       if (node.type !== BaseNode.TYPES.NETWORK) return !canDeferRequest;
@@ -168,7 +232,16 @@ class RenderBlockingResources extends Audit {
         totalChildNetworkBytes += (node.record.transferSize || 0) - wastedBytes;
       }
       return !canDeferRequest;
-    }));
+    });
+
+    if (minimalFCPGraph.type !== 'network') {
+      throw new Error('minimalFCPGraph not a NetworkNode');
+    }
+
+    // Recalculate the "before" time based on our adjusted node timings.
+    const estimateBeforeInline = Math.max(...Array.from(
+      Array.from(adjustedNodeTimings).map(timing => timing[1].endTime)
+    ));
 
     // Add the inlined bytes to the HTML response
     const originalTransferSize = minimalFCPGraph.record.transferSize;
@@ -176,7 +249,7 @@ class RenderBlockingResources extends Audit {
     minimalFCPGraph.record.transferSize = safeTransferSize + totalChildNetworkBytes;
     const estimateAfterInline = simulator.simulate(minimalFCPGraph).timeInMs;
     minimalFCPGraph.record.transferSize = originalTransferSize;
-    return Math.round(Math.max(originalEstimate - estimateAfterInline, 0));
+    return Math.round(Math.max(estimateBeforeInline - estimateAfterInline, 0));
   }
 
   /**
@@ -187,11 +260,13 @@ class RenderBlockingResources extends Audit {
   static async computeWastedCSSBytes(artifacts, context) {
     const wastedBytesByUrl = new Map();
     try {
-      const results = await UnusedCSS.audit(artifacts, context);
-      if (results.details && results.details.type === 'opportunity') {
-        for (const item of results.details.items) {
-          wastedBytesByUrl.set(item.url, item.wastedBytes);
-        }
+      const unusedCssItems = await UnusedCSS.request({
+        CSSUsage: artifacts.CSSUsage,
+        URL: artifacts.URL,
+        devtoolsLog: artifacts.devtoolsLogs[Audit.DEFAULT_PASS],
+      }, context);
+      for (const item of unusedCssItems) {
+        wastedBytesByUrl.set(item.url, item.wastedBytes);
       }
     } catch (_) {}
 
@@ -206,7 +281,7 @@ class RenderBlockingResources extends Audit {
   static async audit(artifacts, context) {
     const {results, wastedMs} = await RenderBlockingResources.computeResults(artifacts, context);
 
-    let displayValue = '';
+    let displayValue;
     if (results.length > 0) {
       displayValue = str_(i18n.UIStrings.displayValueMsSavings, {wastedMs});
     }
@@ -214,7 +289,7 @@ class RenderBlockingResources extends Audit {
     /** @type {LH.Audit.Details.Opportunity['headings']} */
     const headings = [
       {key: 'url', valueType: 'url', label: str_(i18n.UIStrings.columnURL)},
-      {key: 'totalBytes', valueType: 'bytes', label: str_(i18n.UIStrings.columnSize)},
+      {key: 'totalBytes', valueType: 'bytes', label: str_(i18n.UIStrings.columnTransferSize)},
       {key: 'wastedMs', valueType: 'timespanMs', label: str_(i18n.UIStrings.columnWastedMs)},
     ];
 
@@ -224,6 +299,7 @@ class RenderBlockingResources extends Audit {
       displayValue,
       score: ByteEfficiencyAudit.scoreForWastedMs(wastedMs),
       numericValue: wastedMs,
+      numericUnit: 'millisecond',
       details,
     };
   }
