@@ -11,7 +11,7 @@ function defaultLighthouseConfiguration(wptProfile) {
     },
     disableNetworkThrottling: true,
     disableStorageReset: true,
-    emulatedFormFactor: 'mobile',
+    formFactor: 'mobile',
     throttlingMethod: 'devtools',
     throttling: {
       requestLatencyMs: 0,
