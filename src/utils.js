@@ -131,7 +131,11 @@ async function writeResultsToFileSystem(report, lhr, core) {
 async function postResultsToPullRequest(core, lhr, speed, github, secret) {
   const string = parseLighthouseResultsToString(core, lhr, speed);
 
-  if (github.context.payload.pull_request.comments_url && secret) {
+  if (
+    github.context.payload.pull_request &&
+    github.context.payload.pull_request.comments_url &&
+    secret
+  ) {
     await fetch(github.context.payload.pull_request.comments_url, {
       method: 'post',
       body: JSON.stringify({
