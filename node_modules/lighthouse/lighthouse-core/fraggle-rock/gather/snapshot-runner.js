@@ -15,9 +15,10 @@ const {
 const {initializeConfig} = require('../config/config.js');
 const {getBaseArtifacts, finalizeArtifacts} = require('./base-artifacts.js');
 
-/** @param {{page: import('puppeteer').Page, config?: LH.Config.Json}} options */
+/** @param {{page: import('puppeteer').Page, config?: LH.Config.Json, configContext?: LH.Config.FRContext}} options */
 async function snapshot(options) {
-  const {config} = initializeConfig(options.config, {gatherMode: 'snapshot'});
+  const {configContext = {}} = options;
+  const {config} = initializeConfig(options.config, {...configContext, gatherMode: 'snapshot'});
   const driver = new Driver(options.page);
   await driver.connect();
 
@@ -27,7 +28,7 @@ async function snapshot(options) {
 
   return Runner.run(
     async () => {
-      const baseArtifacts = await getBaseArtifacts(config, driver);
+      const baseArtifacts = await getBaseArtifacts(config, driver, {gatherMode: 'snapshot'});
       baseArtifacts.URL.requestedUrl = url;
       baseArtifacts.URL.finalUrl = url;
 
@@ -37,11 +38,14 @@ async function snapshot(options) {
         phase: 'getArtifact',
         gatherMode: 'snapshot',
         driver,
+        baseArtifacts,
         artifactDefinitions,
         artifactState,
         computedCache,
         settings: config.settings,
       });
+
+      await driver.disconnect();
 
       const artifacts = await awaitArtifacts(artifactState);
       return finalizeArtifacts(baseArtifacts, artifacts);

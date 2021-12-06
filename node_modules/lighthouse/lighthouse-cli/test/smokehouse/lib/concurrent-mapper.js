@@ -106,6 +106,21 @@ class ConcurrentMapper {
 
     return Promise.all(result);
   }
+
+  /**
+   * Runs `fn` concurrent to other operations in the pool, at a max of
+   * `concurrency` at a time across all callers on this instance. Default
+   * `concurrency` limit is `Infinity`.
+   * @template U
+   * @param {() => Promise<U>} fn
+   * @param {{concurrency: number}} [options]
+   * @return {Promise<U>}
+   */
+  async runInPool(fn, options = {concurrency: Infinity}) {
+    // Let pooledMap handle the pool management for the cost of boxing a fake `value`.
+    const result = await this.pooledMap([''], fn, options);
+    return result[0];
+  }
 }
 
-module.exports = ConcurrentMapper;
+export {ConcurrentMapper};

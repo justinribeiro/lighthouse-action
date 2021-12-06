@@ -16,9 +16,7 @@
  */
 'use strict';
 
-/* globals self CriticalRequestChainRenderer SnippetRenderer ElementScreenshotRenderer Util */
-
-/** @typedef {import('./dom.js')} DOM */
+/** @typedef {import('./dom.js').DOM} DOM */
 
 // Convenience types for localized AuditDetails.
 /** @typedef {LH.FormattedIcu<LH.Audit.Details>} AuditDetails */
@@ -27,26 +25,21 @@
 /** @typedef {LH.FormattedIcu<LH.Audit.Details.TableItem>} TableItem */
 /** @typedef {LH.FormattedIcu<LH.Audit.Details.ItemValue>} TableItemValue */
 
+import {Util} from './util.js';
+import {CriticalRequestChainRenderer} from './crc-details-renderer.js';
+import {SnippetRenderer} from './snippet-renderer.js';
+import {ElementScreenshotRenderer} from './element-screenshot-renderer.js';
+
 const URL_PREFIXES = ['http://', 'https://', 'data:'];
 
-class DetailsRenderer {
+export class DetailsRenderer {
   /**
    * @param {DOM} dom
-   * @param {{fullPageScreenshot?: LH.Artifacts.FullPageScreenshot}} [options]
+   * @param {{fullPageScreenshot?: LH.Audit.Details.FullPageScreenshot}} [options]
    */
   constructor(dom, options = {}) {
     this._dom = dom;
     this._fullPageScreenshot = options.fullPageScreenshot;
-
-    /** @type {ParentNode} */
-    this._templateContext; // eslint-disable-line no-unused-expressions
-  }
-
-  /**
-   * @param {ParentNode} context
-   */
-  setTemplateContext(context) {
-    this._templateContext = context;
   }
 
   /**
@@ -62,7 +55,7 @@ class DetailsRenderer {
       case 'table':
         return this._renderTable(details);
       case 'criticalrequestchain':
-        return CriticalRequestChainRenderer.render(this._dom, this._templateContext, details, this);
+        return CriticalRequestChainRenderer.render(this._dom, details, this);
       case 'opportunity':
         return this._renderTable(details);
 
@@ -148,24 +141,19 @@ class DetailsRenderer {
    * @return {HTMLElement}
    */
   _renderLink(details) {
-    const allowedProtocols = ['https:', 'http:'];
-    let url;
-    try {
-      url = new URL(details.url);
-    } catch (_) {}
+    const a = this._dom.createElement('a');
+    this._dom.safelySetHref(a, details.url);
 
-    if (!url || !allowedProtocols.includes(url.protocol)) {
+    if (!a.href) {
       // Fall back to just the link text if invalid or protocol not allowed.
       const element = this._renderText(details.text);
       element.classList.add('lh-link');
       return element;
     }
 
-    const a = this._dom.createElement('a');
     a.rel = 'noopener';
     a.target = '_blank';
     a.textContent = details.text;
-    a.href = url.href;
     a.classList.add('lh-link');
     return a;
   }
@@ -491,7 +479,7 @@ class DetailsRenderer {
     const listContainer = this._dom.createElement('div', 'lh-list');
 
     details.items.forEach(item => {
-      const snippetEl = SnippetRenderer.render(this._dom, this._templateContext, item, this);
+      const snippetEl = SnippetRenderer.render(this._dom, item, this);
       listContainer.appendChild(snippetEl);
     });
 
@@ -530,7 +518,6 @@ class DetailsRenderer {
     const maxThumbnailSize = {width: 147, height: 100};
     const elementScreenshot = ElementScreenshotRenderer.render(
       this._dom,
-      this._templateContext,
       this._fullPageScreenshot.screenshot,
       rect,
       maxThumbnailSize
@@ -596,10 +583,9 @@ class DetailsRenderer {
 
     for (const thumbnail of details.items) {
       const frameEl = this._dom.createChildOf(filmstripEl, 'div', 'lh-filmstrip__frame');
-      this._dom.createChildOf(frameEl, 'img', 'lh-filmstrip__thumbnail', {
-        src: thumbnail.data,
-        alt: `Screenshot`,
-      });
+      const imgEl = this._dom.createChildOf(frameEl, 'img', 'lh-filmstrip__thumbnail');
+      imgEl.src = thumbnail.data;
+      imgEl.alt = `Screenshot`;
     }
     return filmstripEl;
   }
@@ -613,10 +599,4 @@ class DetailsRenderer {
     pre.textContent = text;
     return pre;
   }
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = DetailsRenderer;
-} else {
-  self.DetailsRenderer = DetailsRenderer;
 }

@@ -23,4 +23,4 @@ class ChildProcessError extends Error {
   }
 }
 
-module.exports = ChildProcessError;
+export {ChildProcessError};

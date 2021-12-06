@@ -5,10 +5,10 @@
  */
 'use strict';
 
-/* globals self, Util */
+/** @typedef {import('./details-renderer').DetailsRenderer} DetailsRenderer */
+/** @typedef {import('./dom').DOM} DOM */
 
-/** @typedef {import('./details-renderer')} DetailsRenderer */
-/** @typedef {import('./dom')} DOM */
+import {Util} from './util.js';
 
 /** @enum {number} */
 const LineVisibility = {
@@ -87,20 +87,19 @@ function getLinesWhenCollapsed(details) {
  * can click "Expand snippet" to show more.
  * Content lines with annotations are highlighted.
  */
-class SnippetRenderer {
+export class SnippetRenderer {
   /**
    * @param {DOM} dom
-   * @param {DocumentFragment} tmpl
    * @param {LH.Audit.Details.SnippetValue} details
    * @param {DetailsRenderer} detailsRenderer
    * @param {function} toggleExpandedFn
    * @return {DocumentFragment}
    */
-  static renderHeader(dom, tmpl, details, detailsRenderer, toggleExpandedFn) {
+  static renderHeader(dom, details, detailsRenderer, toggleExpandedFn) {
     const linesWhenCollapsed = getLinesWhenCollapsed(details);
     const canExpand = linesWhenCollapsed.length < details.lines.length;
 
-    const header = dom.cloneTemplate('#tmpl-lh-snippet__header', tmpl);
+    const header = dom.createComponent('snippetHeader');
     dom.find('.lh-snippet__title', header).textContent = details.title;
 
     const {
@@ -148,7 +147,7 @@ class SnippetRenderer {
       tmpl,
       {content, lineNumber, truncated, contentType, visibility}
   ) {
-    const clonedTemplate = dom.cloneTemplate('#tmpl-lh-snippet__line', tmpl);
+    const clonedTemplate = dom.createComponent('snippetLine');
     const contentLine = dom.find('.lh-snippet__line', clonedTemplate);
     const {classList} = contentLine;
 
@@ -214,7 +213,7 @@ class SnippetRenderer {
    * @return {DocumentFragment}
    */
   static renderSnippetContent(dom, tmpl, details) {
-    const template = dom.cloneTemplate('#tmpl-lh-snippet__content', tmpl);
+    const template = dom.createComponent('snippetContent');
     const snippetEl = dom.find('.lh-snippet__snippet-inner', template);
 
     // First render messages that don't belong to specific lines
@@ -334,18 +333,16 @@ class SnippetRenderer {
 
   /**
    * @param {DOM} dom
-   * @param {ParentNode} templateContext
    * @param {LH.Audit.Details.SnippetValue} details
    * @param {DetailsRenderer} detailsRenderer
    * @return {!Element}
    */
-  static render(dom, templateContext, details, detailsRenderer) {
-    const tmpl = dom.cloneTemplate('#tmpl-lh-snippet', templateContext);
+  static render(dom, details, detailsRenderer) {
+    const tmpl = dom.createComponent('snippet');
     const snippetEl = dom.find('.lh-snippet', tmpl);
 
     const header = SnippetRenderer.renderHeader(
       dom,
-      tmpl,
       details,
       detailsRenderer,
       () => snippetEl.classList.toggle('lh-snippet--expanded')
@@ -355,11 +352,4 @@ class SnippetRenderer {
 
     return snippetEl;
   }
-}
-
-// Allow Node require()'ing.
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = SnippetRenderer;
-} else {
-  self.SnippetRenderer = SnippetRenderer;
 }

@@ -35,6 +35,7 @@ class HTTPStatusCode extends Audit {
       failureTitle: str_(UIStrings.failureTitle),
       description: str_(UIStrings.description),
       requiredArtifacts: ['devtoolsLogs', 'URL', 'GatherContext'],
+      supportedModes: ['navigation'],
     };
   }
 
@@ -47,12 +48,7 @@ class HTTPStatusCode extends Audit {
     const devtoolsLog = artifacts.devtoolsLogs[Audit.DEFAULT_PASS];
     const URL = artifacts.URL;
     const networkRecords = await NetworkRecords.request(devtoolsLog, context);
-    const mainResource = NetworkAnalyzer.findOptionalMainDocument(networkRecords, URL.finalUrl);
-
-    if (!mainResource) {
-      if (artifacts.GatherContext.gatherMode === 'timespan') return {notApplicable: true, score: 1};
-      throw new Error(`Unable to locate main resource`);
-    }
+    const mainResource = NetworkAnalyzer.findMainDocument(networkRecords, URL.finalUrl);
 
     const statusCode = mainResource.statusCode;
 

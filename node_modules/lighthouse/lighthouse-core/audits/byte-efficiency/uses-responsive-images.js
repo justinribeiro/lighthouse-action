@@ -14,6 +14,7 @@
 'use strict';
 
 const ByteEfficiencyAudit = require('./byte-efficiency-audit.js');
+const NetworkRequest = require('../../lib/network-request.js');
 const ImageRecords = require('../../computed/image-records.js');
 const URL = require('../../lib/url-shim.js');
 const i18n = require('../../lib/i18n/i18n.js');
@@ -99,16 +100,11 @@ class UsesResponsiveImages extends ByteEfficiencyAudit {
     const url = URL.elideDataURI(image.src);
     const actualPixels = image.naturalWidth * image.naturalHeight;
     const wastedRatio = 1 - (usedPixels / actualPixels);
-    // Resource size is almost always the right one to be using because of the below:
-    //     transferSize = resourceSize + headers.length
-    // HOWEVER, there are some cases where an image is compressed again over the network and transfer size
-    // is smaller (see https://github.com/GoogleChrome/lighthouse/pull/4968).
-    // Use the min of the two numbers to be safe.
-    const {resourceSize = 0, transferSize = 0} = networkRecord;
-    const totalBytes = Math.min(resourceSize, transferSize);
+    const totalBytes = NetworkRequest.getResourceSizeOnNetwork(networkRecord);
     const wastedBytes = Math.round(totalBytes * wastedRatio);
 
     return {
+      node: ByteEfficiencyAudit.makeNodeItem(image.node),
       url,
       totalBytes,
       wastedBytes,
@@ -163,7 +159,7 @@ class UsesResponsiveImages extends ByteEfficiencyAudit {
 
     /** @type {LH.Audit.Details.Opportunity['headings']} */
     const headings = [
-      {key: 'url', valueType: 'thumbnail', label: ''},
+      {key: 'node', valueType: 'node', label: ''},
       {key: 'url', valueType: 'url', label: str_(i18n.UIStrings.columnURL)},
       {key: 'totalBytes', valueType: 'bytes', label: str_(i18n.UIStrings.columnResourceSize)},
       {key: 'wastedBytes', valueType: 'bytes', label: str_(i18n.UIStrings.columnWastedBytes)},

@@ -5,8 +5,6 @@
  */
 'use strict';
 
-/* globals self */
-
 // Not named `NBSP` because that creates a duplicate identifier (util.js).
 const NBSP2 = '\xa0';
 const KiB = 1024;
@@ -15,7 +13,7 @@ const MiB = KiB * KiB;
 /**
  * @template T
  */
-class I18n {
+export class I18n {
   /**
    * @param {LH.Locale} locale
    * @param {T} strings
@@ -72,7 +70,7 @@ class I18n {
    */
   formatBytesToMiB(size, granularity = 0.1) {
     const formatter = this._byteFormatterForGranularity(granularity);
-    const kbs = formatter.format(Math.round(size / 1024 ** 2 / granularity) * granularity);
+    const kbs = formatter.format(Math.round(size / (1024 ** 2) / granularity) * granularity);
     return `${kbs}${NBSP2}MiB`;
   }
 
@@ -197,10 +195,4 @@ class I18n {
 
     return parts.join(' ');
   }
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = I18n;
-} else {
-  self.I18n = I18n;
 }

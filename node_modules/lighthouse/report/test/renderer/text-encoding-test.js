@@ -5,13 +5,18 @@
  */
 'use strict';
 
-const TextEncoding = require('../../renderer/text-encoding.js');
+import fs from 'fs';
+
+import pako from 'pako';
+
+import {TextEncoding} from '../../renderer/text-encoding.js';
+import {LH_ROOT} from '../../../root.js';
 
 /* eslint-env jest */
 
 describe('TextEncoding', () => {
   beforeAll(() => {
-    global.window = {pako: require('pako')};
+    global.window = {pako};
   });
 
   afterAll(() => {
@@ -36,6 +41,6 @@ describe('TextEncoding', () => {
     await test('Some examples of emoji are 😃, 🧘🏻‍♂️, 🌍, 🍞, 🚗, 📞, 🎉, ♥️, 🍆, and 🏁.');
     await test('.'.repeat(125183));
     await test('😃'.repeat(125183));
-    await test(JSON.stringify(require('../../../lighthouse-treemap/app/debug.json')));
+    await test(fs.readFileSync(LH_ROOT + '/treemap/app/debug.json', 'utf-8'));
   });
 });

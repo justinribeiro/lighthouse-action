@@ -10,4 +10,4 @@
  */
 
 // Smokehouse is runnable from within node, so just a no-op for now.
-module.exports = require('../smokehouse.js');
+export * from '../smokehouse.js';
