@@ -42,15 +42,15 @@ class CriticalRequestChains extends Audit {
     };
   }
 
-  /** @typedef {{depth: number, id: string, chainDuration: number, chainTransferSize: number, node: LH.Audit.SimpleCriticalRequestNode[string]}} CrcNodeInfo */
+  /** @typedef {{depth: number, id: string, chainDuration: number, chainTransferSize: number, node: LH.Audit.Details.SimpleCriticalRequestNode[string]}} CrcNodeInfo */
 
   /**
-   * @param {LH.Audit.SimpleCriticalRequestNode} tree
+   * @param {LH.Audit.Details.SimpleCriticalRequestNode} tree
    * @param {function(CrcNodeInfo): void} cb
    */
   static _traverse(tree, cb) {
     /**
-     * @param {LH.Audit.SimpleCriticalRequestNode} node
+     * @param {LH.Audit.Details.SimpleCriticalRequestNode} node
      * @param {number} depth
      * @param {number=} startTime
      * @param {number=} transferSize
@@ -87,7 +87,7 @@ class CriticalRequestChains extends Audit {
 
   /**
    * Get stats about the longest initiator chain (as determined by time duration)
-   * @param {LH.Audit.SimpleCriticalRequestNode} tree
+   * @param {LH.Audit.Details.SimpleCriticalRequestNode} tree
    * @return {{duration: number, length: number, transferSize: number}}
    */
   static _getLongestChain(tree) {
@@ -111,12 +111,12 @@ class CriticalRequestChains extends Audit {
 
   /**
    * @param {LH.Artifacts.CriticalRequestNode} tree
-   * @return {LH.Audit.SimpleCriticalRequestNode}
+   * @return {LH.Audit.Details.SimpleCriticalRequestNode}
    */
   static flattenRequests(tree) {
-    /** @type {LH.Audit.SimpleCriticalRequestNode} */
+    /** @type {LH.Audit.Details.SimpleCriticalRequestNode} */
     const flattendChains = {};
-    /** @type {Map<string, LH.Audit.SimpleCriticalRequestNode[string]>} */
+    /** @type {Map<string, LH.Audit.Details.SimpleCriticalRequestNode[string]>} */
     const chainMap = new Map();
 
     /** @param {CrcNodeInfo} opts */
@@ -143,7 +143,7 @@ class CriticalRequestChains extends Audit {
       if (opts.node.children) {
         for (const chainId of Object.keys(opts.node.children)) {
           // Note: cast should be Partial<>, but filled in when child node is traversed.
-          const childChain = /** @type {LH.Audit.SimpleCriticalRequestNode[string]} */ ({
+          const childChain = /** @type {LH.Audit.Details.SimpleCriticalRequestNode[string]} */ ({
             request: {},
           });
           chainMap.set(chainId, childChain);
@@ -174,7 +174,7 @@ class CriticalRequestChains extends Audit {
     return ComputedChains.request({devtoolsLog, trace, URL}, context).then(chains => {
       let chainCount = 0;
       /**
-       * @param {LH.Audit.SimpleCriticalRequestNode} node
+       * @param {LH.Audit.Details.SimpleCriticalRequestNode} node
        * @param {number} depth
        */
       function walk(node, depth) {

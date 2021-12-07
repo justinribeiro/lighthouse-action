@@ -11,8 +11,12 @@
  * Currently uses `lighthouse-dt-bundle.js`.
  */
 
-const ChromeLauncher = require('chrome-launcher');
-const ChromeProtocol = require('../../../../lighthouse-core/gather/connections/cri.js');
+import fs from 'fs';
+
+import ChromeLauncher from 'chrome-launcher';
+
+import ChromeProtocol from '../../../../lighthouse-core/gather/connections/cri.js';
+import {LH_ROOT} from '../../../../root.js';
 
 const originalRequire = global.require;
 if (typeof globalThis === 'undefined') {
@@ -21,8 +25,7 @@ if (typeof globalThis === 'undefined') {
 }
 
 // Load bundle, which creates a `global.runBundledLighthouse`.
-// @ts-ignore - file exists if `yarn build-all` is run, but not used for types anyways.
-require('../../../../dist/lighthouse-dt-bundle.js'); // eslint-disable-line
+eval(fs.readFileSync(LH_ROOT + '/dist/lighthouse-dt-bundle.js', 'utf-8'));
 
 global.require = originalRequire;
 
@@ -43,20 +46,23 @@ async function runLighthouse(url, configJson, testRunnerOptions = {}) {
   const port = launchedChrome.port;
   const connection = new ChromeProtocol(port);
 
-  // Run Lighthouse.
-  const logLevel = testRunnerOptions.isDebug ? 'info' : undefined;
-  const runnerResult = await lighthouse(url, {port, logLevel}, configJson, connection);
-  if (!runnerResult) throw new Error('No runnerResult');
+  try {
+    // Run Lighthouse.
+    const logLevel = testRunnerOptions.isDebug ? 'info' : undefined;
+    const runnerResult = await lighthouse(url, {port, logLevel}, configJson, connection);
+    if (!runnerResult) throw new Error('No runnerResult');
 
-  // Clean up and return results.
-  await launchedChrome.kill();
-  return {
-    lhr: runnerResult.lhr,
-    artifacts: runnerResult.artifacts,
-    log: '', // TODO: if want to run in parallel, need to capture lighthouse-logger output.
-  };
+    return {
+      lhr: runnerResult.lhr,
+      artifacts: runnerResult.artifacts,
+      log: '', // TODO: if want to run in parallel, need to capture lighthouse-logger output.
+    };
+  } finally {
+    // Clean up and return results.
+    await launchedChrome.kill();
+  }
 }
 
-module.exports = {
+export {
   runLighthouse,
 };

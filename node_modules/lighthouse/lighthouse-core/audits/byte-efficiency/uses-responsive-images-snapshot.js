@@ -17,6 +17,10 @@ const URL = require('../../lib/url-shim.js');
 const i18n = require('../../lib/i18n/i18n.js');
 
 const UIStrings = {
+  /** Descriptive title of a Lighthouse audit that checks if images match their displayed dimensions. This is displayed when the audit is passing. */
+  title: 'Images were appropriate for their displayed size',
+  /** Descriptive title of a Lighthouse audit that checks if images match their displayed dimensions. This is displayed when the audit is failing. */
+  failureTitle: 'Images were larger than their displayed size',
   /** Label for a column in a data table; entries will be the dimensions of an image as it appears on the page. */
   columnDisplayedDimensions: 'Displayed dimensions',
   /** Label for a column in a data table; entries will be the dimensions of an image from it's source file. */
@@ -35,7 +39,8 @@ class UsesResponsiveImagesSnapshot extends Audit {
   static get meta() {
     return {
       id: 'uses-responsive-images-snapshot',
-      title: UsesResponsiveImages.str_(UsesResponsiveImages.UIStrings.title),
+      title: str_(UIStrings.title),
+      failureTitle: str_(UIStrings.failureTitle),
       description: UsesResponsiveImages.str_(UsesResponsiveImages.UIStrings.description),
       supportedModes: ['snapshot'],
       requiredArtifacts: ['ImageElements', 'ViewportDimensions'],
@@ -65,6 +70,7 @@ class UsesResponsiveImagesSnapshot extends Audit {
       if (actualPixels - usedPixels > IGNORE_THRESHOLD_IN_PIXELS) score = 0;
 
       items.push({
+        node: Audit.makeNodeItem(image.node),
         url: URL.elideDataURI(image.src),
         displayedDimensions: `${displayed.width}x${displayed.height}`,
         actualDimensions: `${actual.width}x${actual.height}`,
@@ -74,7 +80,7 @@ class UsesResponsiveImagesSnapshot extends Audit {
     /** @type {LH.Audit.Details.Table['headings']} */
     const headings = [
       /* eslint-disable max-len */
-      {key: 'url', itemType: 'thumbnail', text: ''},
+      {key: 'node', itemType: 'node', text: ''},
       {key: 'url', itemType: 'url', text: str_(i18n.UIStrings.columnURL)},
       {key: 'displayedDimensions', itemType: 'text', text: str_(UIStrings.columnDisplayedDimensions)},
       {key: 'actualDimensions', itemType: 'text', text: str_(UIStrings.columnActualDimensions)},

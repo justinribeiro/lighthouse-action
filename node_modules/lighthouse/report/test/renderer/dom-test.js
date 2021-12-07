@@ -5,29 +5,39 @@
  */
 'use strict';
 
-const assert = require('assert').strict;
-const jsdom = require('jsdom');
-const reportAssets = require('../../report-assets.js');
-const DOM = require('../../renderer/dom.js');
-const Util = require('../../renderer/util.js');
-const I18n = require('../../renderer/i18n.js');
+import {strict as assert} from 'assert';
+
+import {jest} from '@jest/globals';
+import jsdom from 'jsdom';
+
+import {DOM} from '../../renderer/dom.js';
+import {Util} from '../../renderer/util.js';
+import {I18n} from '../../renderer/i18n.js';
 
 /* eslint-env jest */
 
 describe('DOM', () => {
+  /** @type {DOM} */
   let dom;
+  let window;
+  let nativeCreateObjectURL;
 
   beforeAll(() => {
-    global.Util = Util;
-    global.Util.i18n = new I18n('en', {...Util.UIStrings});
-    const {document} = new jsdom.JSDOM(reportAssets.REPORT_TEMPLATES).window;
-    dom = new DOM(document);
+    Util.i18n = new I18n('en', {...Util.UIStrings});
+    window = new jsdom.JSDOM().window;
+
+    // The Node version of URL.createObjectURL isn't compatible with the jsdom blob type,
+    // so we stub it.
+    nativeCreateObjectURL = URL.createObjectURL;
+    URL.createObjectURL = jest.fn(_ => `https://fake-origin/blahblah-blobid`);
+
+    dom = new DOM(window.document);
     dom.setLighthouseChannel('someChannel');
   });
 
   afterAll(() => {
-    global.Util.i18n = undefined;
-    global.Util = undefined;
+    Util.i18n = undefined;
+    URL.createObjectURL = nativeCreateObjectURL;
   });
 
   describe('createElement', () => {
@@ -39,38 +49,31 @@ describe('DOM', () => {
     });
 
     it('creates an element from parameters', () => {
-      const el = dom.createElement(
-          'div', 'class1 class2', {title: 'title attr', tabindex: 0});
+      const el = dom.createElement('div', ' class1  class2\n');
       assert.equal(el.localName, 'div');
       assert.equal(el.className, 'class1 class2');
-      assert.equal(el.getAttribute('title'), 'title attr');
-      assert.equal(el.getAttribute('tabindex'), '0');
+    });
+
+    it('creates an svg element from parameters', () => {
+      const el = dom.createElementNS('http://www.w3.org/2000/svg', 'svg', ' class1  class2\n');
+      assert.equal(el.localName, 'svg');
+      assert.equal(el.className.baseVal, 'class1 class2');
     });
   });
 
-  describe('cloneTemplate', () => {
-    it('should clone a template', () => {
-      const clone = dom.cloneTemplate('#tmpl-lh-audit', dom.document());
-      assert.ok(clone.querySelector('.lh-audit'));
+  describe('createComponent', () => {
+    it('should create a component', () => {
+      const component = dom.createComponent('audit');
+      assert.ok(component.querySelector('.lh-audit'));
     });
 
-    it('should clone a template from a context scope', () => {
-      const heading = dom.cloneTemplate('#tmpl-lh-footer', dom.document());
-      const items = dom.cloneTemplate('#tmpl-lh-env__items', heading);
-      assert.ok(items.querySelector('.lh-env__item'));
-    });
-
-    it('fails when template cannot be found', () => {
-      assert.throws(() => dom.cloneTemplate('#unknown-selector', dom.document()));
-    });
-
-    it('fails when a template context isn\'t provided', () => {
-      assert.throws(() => dom.cloneTemplate('#tmpl-lh-audit'));
+    it('fails when component cannot be found', () => {
+      assert.throws(() => dom.createComponent('unknown-component'));
     });
 
     it('does not inject duplicate styles', () => {
-      const clone = dom.cloneTemplate('#tmpl-lh-snippet', dom.document());
-      const clone2 = dom.cloneTemplate('#tmpl-lh-snippet', dom.document());
+      const clone = dom.createComponent('snippet');
+      const clone2 = dom.createComponent('snippet');
       assert.ok(clone.querySelector('style'));
       assert.ok(!clone2.querySelector('style'));
     });
@@ -152,6 +155,79 @@ describe('DOM', () => {
           'Here is some `code`, and then some `more code`, and yet event `more`.');
       assert.equal(result.innerHTML, 'Here is some <code>code</code>, and then some ' +
           '<code>more code</code>, and yet event <code>more</code>.');
+    });
+  });
+
+  describe('safelySetHref', () => {
+    it('sets href for safe destinations', () => {
+      [
+        'https://safe.com/',
+        'http://safe.com/',
+      ].forEach(url => {
+        const a = dom.createElement('a');
+        dom.safelySetHref(a, url);
+        expect(a.href).toEqual(url);
+      });
+    });
+
+    it('sets href for safe in-page named anchors', () => {
+      const a = dom.createElement('a');
+      dom.safelySetHref(a, '#footer');
+      expect(a.href).toEqual('about:blank#footer');
+    });
+
+    it('doesnt set href if destination is unsafe', () => {
+      [
+        'javascript:evil()',
+        'data:text/html;base64,abcdef',
+        'data:application/json;base64,abcdef',
+        'ftp://evil.com/',
+        'blob:http://example.com/ca6df701-9c67-49fd-a787',
+        'intent://example.com',
+        'filesystem:http://localhost/img.png',
+        'ws://evilchat.com/',
+        'wss://evilchat.com/',
+        'about:about',
+        'chrome://chrome-urls/',
+      ].forEach(url => {
+        const a = dom.createElement('a');
+        dom.safelySetHref(a, url);
+
+        expect(a.href).toEqual('');
+        expect(a.getAttribute('href')).toEqual(null);
+      });
+    });
+
+    it('handles if url is undefined (because of proto roundtrip)', () => {
+      const a = dom.createElement('a');
+      dom.safelySetHref(a, undefined);
+      expect(a.href).toEqual('');
+    });
+  });
+
+  describe('safelySetBlobHref', () => {
+    it('sets href for safe blob types', () => {
+      [
+        new window.Blob([JSON.stringify({test: 1234})], {type: 'application/json'}),
+        new window.Blob([`<html><h1>hello`], {type: 'text/html'}),
+      ].forEach(blob => {
+        const a = dom.createElement('a');
+        dom.safelySetBlobHref(a, blob);
+        expect(a.href).toEqual('https://fake-origin/blahblah-blobid');
+      });
+    });
+
+    it('throws with unsupported blob types', () => {
+      [
+        new window.Blob(['<xml>'], {type: 'image/svg+xml'}),
+        new window.Blob(['evilbinary'], {type: 'application/octet-stream'}),
+        new window.Blob(['fake']),
+      ].forEach(blob => {
+        const a = dom.createElement('a');
+        expect(() => {
+          dom.safelySetBlobHref(a, blob);
+        }).toThrowError(/Unsupported blob/);
+      });
     });
   });
 });

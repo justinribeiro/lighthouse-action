@@ -5,7 +5,7 @@
  */
 'use strict';
 
-/* global self btoa atob window CompressionStream Response */
+/* global CompressionStream */
 
 const btoa_ = typeof btoa !== 'undefined' ?
   btoa :
@@ -71,8 +71,4 @@ function fromBase64(encoded, options) {
   }
 }
 
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {toBase64, fromBase64};
-} else {
-  self.TextEncoding = {toBase64, fromBase64};
-}
+export const TextEncoding = {toBase64, fromBase64};

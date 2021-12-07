@@ -48,4 +48,4 @@ class LocalConsole {
   }
 }
 
-module.exports = LocalConsole;
+export {LocalConsole};

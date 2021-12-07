@@ -5,17 +5,18 @@
  */
 'use strict';
 
-/* eslint-env jest, browser */
+/* eslint-env jest */
 
-const assert = require('assert').strict;
-const jsdom = require('jsdom');
-const reportAssets = require('../../report-assets.js');
-const Util = require('../../renderer/util.js');
-const I18n = require('../../renderer/i18n.js');
-const DOM = require('../../renderer/dom.js');
-const DetailsRenderer = require('../../renderer/details-renderer.js');
-const CategoryRenderer = require('../../renderer/category-renderer.js');
-const sampleResultsOrig = require('../../../lighthouse-core/test/results/sample_v2.json');
+import {strict as assert} from 'assert';
+
+import jsdom from 'jsdom';
+
+import {Util} from '../../renderer/util.js';
+import {I18n} from '../../renderer/i18n.js';
+import {DOM} from '../../renderer/dom.js';
+import {DetailsRenderer} from '../../renderer/details-renderer.js';
+import {PwaCategoryRenderer} from '../../renderer/pwa-category-renderer.js';
+import sampleResultsOrig from '../../../lighthouse-core/test/results/sample_v2.json';
 
 describe('PwaCategoryRenderer', () => {
   let category;
@@ -23,14 +24,9 @@ describe('PwaCategoryRenderer', () => {
   let sampleResults;
 
   beforeAll(() => {
-    global.Util = Util;
-    global.Util.i18n = new I18n('en', {...Util.UIStrings});
-    global.CategoryRenderer = CategoryRenderer;
+    Util.i18n = new I18n('en', {...Util.UIStrings});
 
-    // Delayed so that CategoryRenderer is in global scope
-    const PwaCategoryRenderer = require('../../renderer/pwa-category-renderer.js');
-
-    const {document} = new jsdom.JSDOM(reportAssets.REPORT_TEMPLATES).window;
+    const {document} = new jsdom.JSDOM().window;
     const dom = new DOM(document);
     const detailsRenderer = new DetailsRenderer(dom);
     pwaRenderer = new PwaCategoryRenderer(dom, detailsRenderer);
@@ -45,9 +41,7 @@ describe('PwaCategoryRenderer', () => {
   });
 
   afterAll(() => {
-    global.Util.i18n = undefined;
-    global.Util = undefined;
-    global.CategoryRenderer = undefined;
+    Util.i18n = undefined;
   });
 
   it('renders the regular audits', () => {
@@ -113,12 +107,12 @@ describe('PwaCategoryRenderer', () => {
       const clone = JSON.parse(JSON.stringify(sampleResults));
       const category = clone.categories.pwa;
 
-      // Set everything to passing, except redirects-http set to n/a (as it is on localhost)
+      // Set everything to passing, except for one. (themed-omnibox chosen randomly)
       for (const auditRef of category.auditRefs) {
         auditRef.result.score = 1;
         auditRef.result.scoreDisplayMode = 'binary';
       }
-      const audit = category.auditRefs.find(ref => ref.id === 'redirects-http');
+      const audit = category.auditRefs.find(ref => ref.id === 'themed-omnibox');
       audit.result.scoreDisplayMode = 'notApplicable';
       audit.result.score = null;
 
@@ -255,10 +249,10 @@ describe('PwaCategoryRenderer', () => {
     });
   });
 
-  describe('#renderScoreGauge', () => {
+  describe('#renderCategoryScore', () => {
     it('renders an error score gauge in case of category error', () => {
       category.score = null;
-      const badgeGauge = pwaRenderer.renderScoreGauge(category, sampleResults.categoryGroups);
+      const badgeGauge = pwaRenderer.renderCategoryScore(category, sampleResults.categoryGroups);
 
       // Not a PWA gauge.
       assert.strictEqual(badgeGauge.querySelector('.lh-gauge--pwa__wrapper'), null);
@@ -269,11 +263,11 @@ describe('PwaCategoryRenderer', () => {
     });
 
     it('renders score gauges with unique ids for items in <defs>', () => {
-      const gauge1 = pwaRenderer.renderScoreGauge(category, sampleResults.categoryGroups);
+      const gauge1 = pwaRenderer.renderCategoryScore(category, sampleResults.categoryGroups);
       const gauge1Ids = [...gauge1.querySelectorAll('defs [id]')].map(el => el.id);
       assert.ok(gauge1Ids.length > 2);
 
-      const gauge2 = pwaRenderer.renderScoreGauge(category, sampleResults.categoryGroups);
+      const gauge2 = pwaRenderer.renderCategoryScore(category, sampleResults.categoryGroups);
       const gauge2Ids = [...gauge2.querySelectorAll('defs [id]')].map(el => el.id);
       assert.ok(gauge2Ids.length === gauge1Ids.length);
 

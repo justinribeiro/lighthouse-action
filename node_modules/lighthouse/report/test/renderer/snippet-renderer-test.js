@@ -7,13 +7,14 @@
 
 /* eslint-env jest */
 
-const assert = require('assert').strict;
-const jsdom = require('jsdom');
-const reportAssets = require('../../report-assets.js');
-const Util = require('../../renderer/util.js');
-const I18n = require('../../renderer/i18n.js');
-const DOM = require('../../renderer/dom.js');
-const SnippetRenderer = require('../../renderer/snippet-renderer.js');
+import {strict as assert} from 'assert';
+
+import jsdom from 'jsdom';
+
+import {Util} from '../../renderer/util.js';
+import {I18n} from '../../renderer/i18n.js';
+import {DOM} from '../../renderer/dom.js';
+import {SnippetRenderer} from '../../renderer/snippet-renderer.js';
 
 /* Generates a snippet lines array like this (for a single range from 1 to 4):
   [
@@ -57,19 +58,17 @@ describe('DetailsRenderer', () => {
   let dom;
 
   beforeAll(() => {
-    global.Util = Util;
-    global.Util.i18n = new I18n('en', {...Util.UIStrings});
-    const {document} = new jsdom.JSDOM(reportAssets.REPORT_TEMPLATES).window;
+    Util.i18n = new I18n('en', {...Util.UIStrings});
+    const {document} = new jsdom.JSDOM().window;
     dom = new DOM(document);
   });
 
   afterAll(() => {
-    global.Util.i18n = undefined;
-    global.Util = undefined;
+    Util.i18n = undefined;
   });
 
   function renderSnippet(details) {
-    const el = SnippetRenderer.render(dom, dom.document(), details, {});
+    const el = SnippetRenderer.render(dom, details, {});
 
     return {
       el,

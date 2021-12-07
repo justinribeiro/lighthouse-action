@@ -5,16 +5,14 @@
  */
 'use strict';
 
-const assert = require('assert').strict;
-const jsdom = require('jsdom');
-const reportAssets = require('../../report-assets.js');
-const DOM = require('../../renderer/dom.js');
-const Util = require('../../renderer/util.js');
-const I18n = require('../../renderer/i18n.js');
-const DetailsRenderer = require('../../renderer/details-renderer.js');
-const SnippetRenderer = require('../../renderer/snippet-renderer.js');
-const CrcDetailsRenderer = require('../../renderer/crc-details-renderer.js');
-const ElementScreenshotRenderer = require('../../renderer/element-screenshot-renderer.js');
+import {strict as assert} from 'assert';
+
+import jsdom from 'jsdom';
+
+import {DOM} from '../../renderer/dom.js';
+import {Util} from '../../renderer/util.js';
+import {I18n} from '../../renderer/i18n.js';
+import {DetailsRenderer} from '../../renderer/details-renderer.js';
 
 /* eslint-env jest */
 
@@ -22,27 +20,18 @@ describe('DetailsRenderer', () => {
   let renderer;
 
   function createRenderer(options) {
-    const {document} = new jsdom.JSDOM(reportAssets.REPORT_TEMPLATES).window;
+    const {document} = new jsdom.JSDOM().window;
     const dom = new DOM(document);
     renderer = new DetailsRenderer(dom, options);
-    renderer.setTemplateContext(dom.document());
   }
 
   beforeAll(() => {
-    global.Util = Util;
-    global.Util.i18n = new I18n('en', {...Util.UIStrings});
-    global.CriticalRequestChainRenderer = CrcDetailsRenderer;
-    global.SnippetRenderer = SnippetRenderer;
-    global.ElementScreenshotRenderer = ElementScreenshotRenderer;
+    Util.i18n = new I18n('en', {...Util.UIStrings});
     createRenderer();
   });
 
   afterAll(() => {
-    global.Util.i18n = undefined;
-    global.Util = undefined;
-    global.CriticalRequestChainRenderer = undefined;
-    global.SnippetRenderer = undefined;
-    global.ElementScreenshotRenderer = undefined;
+    Util.i18n = undefined;
   });
 
   describe('render', () => {
@@ -122,7 +111,7 @@ describe('DetailsRenderer', () => {
 
       const crcEl = renderer.render(details);
       assert.ok(crcEl.classList.contains('lh-crc-container'));
-      assert.strictEqual(crcEl.querySelectorAll('.crc-node').length, 1);
+      assert.strictEqual(crcEl.querySelectorAll('.lh-crc-node').length, 1);
     });
 
     it('renders opportunity details as a table', () => {

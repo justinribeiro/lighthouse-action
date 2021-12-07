@@ -10,15 +10,10 @@
  * against the results actually collected from Lighthouse.
  */
 
-const cloneDeep = require('lodash.clonedeep');
-const log = require('lighthouse-logger');
-const LocalConsole = require('./lib/local-console.js');
+import cloneDeep from 'lodash.clonedeep';
+import log from 'lighthouse-logger';
 
-const NUMBER_REGEXP = /(?:\d|\.)+/.source;
-const OPS_REGEXP = /<=?|>=?|\+\/-|±/.source;
-// An optional number, optional whitespace, an operator, optional whitespace, a number.
-const NUMERICAL_EXPECTATION_REGEXP =
-  new RegExp(`^(${NUMBER_REGEXP})?\\s*(${OPS_REGEXP})\\s*(${NUMBER_REGEXP})$`);
+import {LocalConsole} from './lib/local-console.js';
 
 /**
  * @typedef Difference
@@ -35,6 +30,12 @@ const NUMERICAL_EXPECTATION_REGEXP =
  * @property {boolean} equal
  * @property {Difference|null} [diff]
  */
+
+const NUMBER_REGEXP = /(?:\d|\.)+/.source;
+const OPS_REGEXP = /<=?|>=?|\+\/-|±/.source;
+// An optional number, optional whitespace, an operator, optional whitespace, a number.
+const NUMERICAL_EXPECTATION_REGEXP =
+  new RegExp(`^(${NUMBER_REGEXP})?\\s*(${OPS_REGEXP})\\s*(${NUMBER_REGEXP})$`);
 
 /**
  * Checks if the actual value matches the expectation. Does not recursively search. This supports
@@ -157,25 +158,36 @@ function makeComparison(name, actualResult, expectedResult) {
  * @param {LocalConsole} localConsole
  * @param {LH.Result} lhr
  * @param {Smokehouse.ExpectedRunnerResult} expected
+ * @param {{isBundled?: boolean}=} reportOptions
  */
-function pruneExpectations(localConsole, lhr, expected) {
-  const userAgent = lhr.environment.hostUserAgent;
-  const userAgentMatch = /Chrome\/(\d+)/.exec(userAgent); // Chrome/85.0.4174.0
-  if (!userAgentMatch) throw new Error('Could not get chrome version.');
-  const actualChromeVersion = Number(userAgentMatch[1]);
+function pruneExpectations(localConsole, lhr, expected, reportOptions) {
+  const isFraggleRock = lhr.configSettings.channel === 'fraggle-rock-cli';
+  const isBundled = reportOptions && reportOptions.isBundled;
+
+  /**
+   * Lazily compute the Chrome version because some reports are explicitly asserting error conditions.
+   * @returns {number}
+   */
+  function getChromeVersion() {
+    const userAgent = lhr.environment.hostUserAgent;
+    const userAgentMatch = /Chrome\/(\d+)/.exec(userAgent); // Chrome/85.0.4174.0
+    if (!userAgentMatch) throw new Error('Could not get chrome version.');
+    return Number(userAgentMatch[1]);
+  }
+
   /**
    * @param {*} obj
    */
   function failsChromeVersionCheck(obj) {
-    if (obj._minChromiumMilestone && actualChromeVersion < obj._minChromiumMilestone) return true;
-    if (obj._maxChromiumMilestone && actualChromeVersion > obj._maxChromiumMilestone) return true;
+    if (obj._minChromiumMilestone && getChromeVersion() < obj._minChromiumMilestone) return true;
+    if (obj._maxChromiumMilestone && getChromeVersion() > obj._maxChromiumMilestone) return true;
     return false;
   }
 
   /**
    * @param {*} obj
    */
-  function pruneNewerChromeExpectations(obj) {
+  function pruneRecursively(obj) {
     for (const key of Object.keys(obj)) {
       const value = obj[key];
       if (!value || typeof value !== 'object') {
@@ -186,20 +198,59 @@ function pruneExpectations(localConsole, lhr, expected) {
         localConsole.log([
           `[${key}] failed chrome version check, pruning expectation:`,
           JSON.stringify(value, null, 2),
-          `Actual Chromium version: ${actualChromeVersion}`,
+          `Actual Chromium version: ${getChromeVersion()}`,
         ].join(' '));
-        delete obj[key];
+        if (Array.isArray(obj)) {
+          obj.splice(Number(key), 1);
+        } else {
+          delete obj[key];
+        }
+      } else if (value._legacyOnly && isFraggleRock) {
+        localConsole.log([
+          `[${key}] marked legacy only but run is Fraggle Rock, pruning expectation:`,
+          JSON.stringify(value, null, 2),
+        ].join(' '));
+        if (Array.isArray(obj)) {
+          obj.splice(Number(key), 1);
+        } else {
+          delete obj[key];
+        }
+      } else if (value._fraggleRockOnly && !isFraggleRock) {
+        localConsole.log([
+          `[${key}] marked Fraggle Rock only but run is legacy, pruning expectation:`,
+          JSON.stringify(value, null, 2),
+          `Actual channel: ${lhr.configSettings.channel}`,
+        ].join(' '));
+        if (Array.isArray(obj)) {
+          obj.splice(Number(key), 1);
+        } else {
+          delete obj[key];
+        }
+      } else if (value._skipInBundled && !isBundled) {
+        localConsole.log([
+          `[${key}] marked as skip in bundled and runner is bundled, pruning expectation:`,
+          JSON.stringify(value, null, 2),
+        ].join(' '));
+        if (Array.isArray(obj)) {
+          obj.splice(Number(key), 1);
+        } else {
+          delete obj[key];
+        }
       } else {
-        pruneNewerChromeExpectations(value);
+        pruneRecursively(value);
       }
     }
+
+    delete obj._legacyOnly;
+    delete obj._fraggleRockOnly;
+    delete obj._skipInBundled;
     delete obj._minChromiumMilestone;
     delete obj._maxChromiumMilestone;
   }
 
   const cloned = cloneDeep(expected);
 
-  pruneNewerChromeExpectations(cloned);
+  pruneRecursively(cloned);
   return cloned;
 }
 
@@ -265,12 +316,7 @@ function collateResults(localConsole, actual, expected) {
   }
 
   return [
-    {
-      name: 'final url',
-      actual: actual.lhr.finalUrl,
-      expected: expected.lhr.finalUrl,
-      equal: actual.lhr.finalUrl === expected.lhr.finalUrl,
-    },
+    makeComparison('final url', actual.lhr.finalUrl, expected.lhr.finalUrl),
     runtimeErrorAssertion,
     runWarningsAssertion,
     ...requestCountAssertion,
@@ -334,26 +380,17 @@ function reportAssertion(localConsole, assertion) {
 }
 
 /**
- * @param {number} count
- * @return {string}
- */
-function assertLogString(count) {
-  const plural = count === 1 ? '' : 's';
-  return `${count} assertion${plural}`;
-}
-
-/**
  * Log all the comparisons between actual and expected test results, then print
  * summary. Returns count of passed and failed tests.
  * @param {{lhr: LH.Result, artifacts: LH.Artifacts, networkRequests?: string[]}} actual
  * @param {Smokehouse.ExpectedRunnerResult} expected
- * @param {{isDebug?: boolean}=} reportOptions
+ * @param {{isDebug?: boolean, isBundled?: boolean}=} reportOptions
  * @return {{passed: number, failed: number, log: string}}
  */
-function report(actual, expected, reportOptions = {}) {
+function getAssertionReport(actual, expected, reportOptions = {}) {
   const localConsole = new LocalConsole();
 
-  expected = pruneExpectations(localConsole, actual.lhr, expected);
+  expected = pruneExpectations(localConsole, actual.lhr, expected, reportOptions);
   const comparisons = collateResults(localConsole, actual, expected);
 
   let correctCount = 0;
@@ -371,17 +408,6 @@ function report(actual, expected, reportOptions = {}) {
     }
   });
 
-  const correctStr = assertLogString(correctCount);
-  const colorFn = correctCount === 0 ? log.redify : log.greenify;
-  localConsole.log(`  Correctly passed ${colorFn(correctStr)}`);
-
-  if (failedCount) {
-    const failedString = assertLogString(failedCount);
-    const failedColorFn = failedCount === 0 ? log.greenify : log.redify;
-    localConsole.log(`  Failed ${failedColorFn(failedString)}`);
-  }
-  localConsole.write('\n');
-
   return {
     passed: correctCount,
     failed: failedCount,
@@ -389,4 +415,4 @@ function report(actual, expected, reportOptions = {}) {
   };
 }
 
-module.exports = report;
+export {getAssertionReport};

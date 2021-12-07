@@ -205,7 +205,7 @@ function gatherTapTargets(tapTargetsSelector, className) {
 
   /** @type {{
     tapTargetElement: Element,
-    clientRects: ClientRect[]
+    clientRects: LH.Artifacts.Rect[]
   }[]} */
   const tapTargetsWithClientRects = [];
   tapTargetElements.forEach(tapTargetElement => {
@@ -238,7 +238,7 @@ function gatherTapTargets(tapTargetsSelector, className) {
 
   /** @type {{
     tapTargetElement: Element,
-    visibleClientRects: ClientRect[]
+    visibleClientRects: LH.Artifacts.Rect[]
   }[]} */
   const tapTargetsWithVisibleClientRects = [];
   // We use separate loop here to get visible client rects because that involves

@@ -70,6 +70,10 @@ lighthouse.getAuditList = Runner.getAuditList;
 lighthouse.traceCategories = require('./gather/driver.js').traceCategories;
 lighthouse.Audit = require('./audits/audit.js');
 lighthouse.Gatherer = require('./gather/gatherers/gatherer.js');
+
+// Explicit type reference (hidden by makeComputedArtifact) for d.ts export.
+// TODO(esmodules): should be a workaround for module.export and can be removed when in esm.
+/** @type {typeof import('./computed/network-records.js')} */
 lighthouse.NetworkRecords = require('./computed/network-records.js');
 
 module.exports = lighthouse;

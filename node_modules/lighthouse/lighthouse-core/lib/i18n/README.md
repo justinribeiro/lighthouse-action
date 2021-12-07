@@ -1,7 +1,7 @@
 # Terminology
 
 * **CTC format**: The [Chrome extension & Chrome app i18n format](https://developer.chrome.com/extensions/i18n-messages) with some minor changes. JSON with their specified model for declaring placeholders, examples, etc. Used as an interchange data format.
-* **LHL syntax** (Lighthouse Localizable syntax): The ICU-friendly string syntax that is used to author `UIStrings` and is seen in the locale files in `i18n/locales/*.json`. Lighthouse has a custom syntax these strings combines many ICU message features along with some markdown.
+* **LHL syntax** (Lighthouse Localizable syntax): The ICU-friendly string syntax that is used to author `UIStrings` and is seen in the locale files in `shared/localization/locales/*.json`. Lighthouse has a custom syntax these strings combines many ICU message features along with some markdown.
 * **ICU**: ICU (International Components for Unicode) is a localization project and standard defined by the Unicode consortium. In general, we refer to "ICU" as the [ICU message formatting](http://userguide.icu-project.org/formatparse/messages) syntax.
 
 # The Lighthouse i18n pipeline
@@ -12,11 +12,11 @@ The collection and translation pipeline:
 ```
  Source files:                                         Locale files:
 +---------------------------+                         +----------------------------------------------
-|                           ++                        | lighthouse-core/lib/i18n/locales/en-US.json |
-| const UIStrings = { ... };|-+                 +---> | lighthouse-core/lib/i18n/locales/en-XL.json |
+|                           ++                        | shared/localization/locales/en-US.json |
+| const UIStrings = { ... };|-+                 +---> | shared/localization/locales/en-XL.json |
 |                           |-|                 |     +----------------------------------------------+
 +-----------------------------|                 |     |                                             ||
- +----------------------------|                 |     | lighthouse-core/lib/i18n/locales/*.json     |-<+
+ +----------------------------|                 |     | shared/localization/locales/*.json     |-<+
   +---------------------------+                 |     |                                             || |
                            |                    |     +----------------------------------------------| |
   $ yarn                   |                    |      +---------------------------------------------+ |
@@ -39,7 +39,7 @@ To a typical developer, the pipeline looks like this:
 $ yarn i18n:collect-strings
 
 # Test to see that the new translations are valid and apply to all strings
-$ node lighthouse-core/scripts/build-report-for-autodeployment.js && open dist/xl-accented/index.html
+$ yarn build-sample-reports && open dist/xl-accented/index.html
 ```
 
 Note: Why do `en-US` and `en-XL` get baked early?  We write all our strings in `en-US` by default, so they do not need to be translated, so it can be immediately baked without going to the translators.  Similarly, `en-XL` is a debugging language, it is an automated version of `en-US` that simply adds markers to `en` strings in order to make it obvious that something has or hasn't been translated.  So neither of these files need to go to translators to be used, and both can be used at develop-time to help developer i18n workflow.
@@ -218,7 +218,7 @@ CTC is a name that is distinct and identifies this as the Chrome translation for
 1.  String called in `.js` file, converted to `LH.IcuMessage` object.
 
 1.  Message object is replaced with the localized string via
-    `i18n.replaceIcuMessages` and `i18n.getFormatted`.
+    `format.replaceIcuMessages` and `format.getFormatted`.
 
 #### Example:
 
@@ -251,7 +251,7 @@ CTC is a name that is distinct and identifies this as the Chrome translation for
     }
     ```
 
-3.  Lookup in `i18n.replaceIcuMessages` and `i18n.getFormatted` will attempt to find the message in this order:
+3.  Lookup in `format.replaceIcuMessages` and `format.getFormatted` will attempt to find the message in this order:
 
     1.  `locales/{locale}.json` The best result. `icuMessage.i18nId` is found in the target locale and the resulting string should appear correct.
 

@@ -12,7 +12,6 @@ const NetworkRequest = require('../../lib/network-request.js');
 const pageFunctions = require('../../lib/page-functions.js');
 const {fetchResponseBodyFromCache} = require('../driver/network.js');
 const DevtoolsLog = require('./devtools-log.js');
-const HostFormFactor = require('./host-form-factor.js');
 
 /* global getNodeDetails */
 
@@ -67,10 +66,10 @@ async function runInSeriesOrParallel(values, promiseMapper, runInSeries) {
  * @fileoverview Gets JavaScript file contents.
  */
 class ScriptElements extends FRGatherer {
-  /** @type {LH.Gatherer.GathererMeta<'DevtoolsLog'|'HostFormFactor'>} */
+  /** @type {LH.Gatherer.GathererMeta<'DevtoolsLog'>} */
   meta = {
     supportedModes: ['timespan', 'navigation'],
-    dependencies: {DevtoolsLog: DevtoolsLog.symbol, HostFormFactor: HostFormFactor.symbol},
+    dependencies: {DevtoolsLog: DevtoolsLog.symbol},
   }
 
   /**
@@ -138,11 +137,11 @@ class ScriptElements extends FRGatherer {
   }
 
   /**
-   * @param {LH.Gatherer.FRTransitionalContext<'DevtoolsLog'|'HostFormFactor'>} context
+   * @param {LH.Gatherer.FRTransitionalContext<'DevtoolsLog'>} context
    */
   async getArtifact(context) {
     const devtoolsLog = context.dependencies.DevtoolsLog;
-    const formFactor = context.dependencies.HostFormFactor;
+    const formFactor = context.baseArtifacts.HostFormFactor;
     const networkRecords = await NetworkRecords.request(devtoolsLog, context);
     return this._getArtifact(context, networkRecords, formFactor);
   }

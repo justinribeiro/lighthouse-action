@@ -7,14 +7,15 @@
 
 /* eslint-env jest */
 
-const assert = require('assert').strict;
-const jsdom = require('jsdom');
-const reportAssets = require('../../report-assets.js');
-const Util = require('../../renderer/util.js');
-const I18n = require('../../renderer/i18n.js');
-const DOM = require('../../renderer/dom.js');
-const DetailsRenderer = require('../../renderer/details-renderer.js');
-const CriticalRequestChainRenderer = require('../../renderer/crc-details-renderer.js');
+import {strict as assert} from 'assert';
+
+import jsdom from 'jsdom';
+
+import {Util} from '../../renderer/util.js';
+import {I18n} from '../../renderer/i18n.js';
+import {DOM} from '../../renderer/dom.js';
+import {DetailsRenderer} from '../../renderer/details-renderer.js';
+import {CriticalRequestChainRenderer} from '../../renderer/crc-details-renderer.js';
 
 const superLongURL =
     'https://example.com/thisIsASuperLongURLThatWillTriggerFilenameTruncationWhichWeWantToTest.js';
@@ -75,21 +76,20 @@ describe('DetailsRenderer', () => {
   let detailsRenderer;
 
   beforeAll(() => {
-    global.Util = Util;
-    global.Util.i18n = new I18n('en', {...Util.UIStrings});
-    const {document} = new jsdom.JSDOM(reportAssets.REPORT_TEMPLATES).window;
+    Util.i18n = new I18n('en', {...Util.UIStrings});
+
+    const {document} = new jsdom.JSDOM().window;
     dom = new DOM(document);
     detailsRenderer = new DetailsRenderer(dom);
   });
 
   afterAll(() => {
-    global.Util.i18n = undefined;
-    global.Util = undefined;
+    Util.i18n = undefined;
   });
 
   it('renders tree structure', () => {
-    const el = CriticalRequestChainRenderer.render(dom, dom.document(), DETAILS, detailsRenderer);
-    const chains = el.querySelectorAll('.crc-node');
+    const el = CriticalRequestChainRenderer.render(dom, DETAILS, detailsRenderer);
+    const chains = el.querySelectorAll('.lh-crc-node');
 
     // Main request
     assert.equal(chains.length, 4, 'generates correct number of chain nodes');
@@ -100,14 +100,14 @@ describe('DetailsRenderer', () => {
     assert.equal(chains[0].querySelector('.lh-text__url a').target, '_blank');
 
     // Children
-    assert.ok(chains[1].querySelector('.crc-node__tree-marker .vert-right'));
-    assert.equal(chains[1].querySelectorAll('.crc-node__tree-marker .right').length, 2);
+    assert.ok(chains[1].querySelector('.lh-crc-node__tree-marker .lh-vert-right'));
+    assert.equal(chains[1].querySelectorAll('.lh-crc-node__tree-marker .lh-right').length, 2);
     assert.equal(chains[1].querySelector('.lh-text__url a').textContent, '/b.js');
     assert.equal(chains[1].querySelector('.lh-text__url a').href, 'https://example.com/b.js');
     assert.equal(chains[1].querySelector('.lh-text__url a').rel, 'noopener');
     assert.equal(chains[1].querySelector('.lh-text__url a').target, '_blank');
     assert.equal(chains[1].querySelector('.lh-text__url-host').textContent, '(example.com)');
-    const durationNodes = chains[1].querySelectorAll('.crc-node__chain-duration');
+    const durationNodes = chains[1].querySelectorAll('.lh-crc-node__chain-duration');
     assert.equal(durationNodes[0].textContent, ' - 5,000\xa0ms, ');
     // Note: actual transferSize is 2000 bytes but formatter formats to KiBs.
     assert.equal(durationNodes[1].textContent, '1.95\xa0KiB');

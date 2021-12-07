@@ -176,7 +176,7 @@ class CspXss extends Audit {
 
     return {
       score,
-      notApplicable: false,
+      notApplicable: !results.length,
       details,
     };
   }
