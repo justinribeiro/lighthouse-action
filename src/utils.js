@@ -4,9 +4,7 @@ const {ensureDir} = require('fs-extra');
 const {join} = require('path');
 const {writeFile} = require('fs').promises;
 const fetch = require('node-fetch');
-const {
-  getFilenamePrefix,
-} = require('lighthouse/lighthouse-core/lib/file-namer');
+const {getFilenamePrefix} = require('lighthouse/report/generator/file-namer');
 const {getOverBudgetItems, getScoreBudgetItems} = require('./checks');
 const {getCustomLighthouseScoringBudget} = require('./config');
 
