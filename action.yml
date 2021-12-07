@@ -17,7 +17,7 @@ outputs:
   resultsPath:
     description: 'Path to the folder with Lighthouse audit results'
 runs:
-  using: 'node12'
+  using: 'node16'
   main: 'src/index.js'
 branding:
   icon: 'aperture'
