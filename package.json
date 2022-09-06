@@ -13,7 +13,7 @@
     "prettier": "^1.18.2"
   },
   "dependencies": {
-    "@actions/core": "^1.2.6",
+    "@actions/core": "^1.9.1",
     "@actions/github": "^5.0.0",
     "fs-extra": "^8.1.0",
     "lighthouse": "^9.0.0",
