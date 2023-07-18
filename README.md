@@ -64,7 +64,6 @@ jobs:
       - name: Generate Lighthouse Report
         uses: justinribeiro/lighthouse-action@master
         with:
-        with:
           secret: ${{ secrets.GITHUB_TOKEN }}
           url: https://justinribeiro.com/
           lighthouseBudget: .github/test/budget.json
